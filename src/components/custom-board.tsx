@@ -1,14 +1,14 @@
 import { Fragment, useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router"
-import { BarChart3, ChevronDown, ChevronRight, ChevronUp, Columns2, Plus, Table2, Trash2 } from "lucide-react"
+import { BarChart3, ChevronDown, ChevronRight, ChevronUp, Columns2, PanelTop, Plus, Table2, Trash2 } from "lucide-react"
 
 import { BoardTitle } from "@/components/board-title"
 import { EditableCell } from "@/components/board-table"
 import { FirmChart } from "@/components/firm-chart"
 import { ColumnResizeHandle, resizeCeiling, storedColumnWidth, tablePixelWidth, useColumnWidths, useFrameWidth } from "@/components/column-resize"
 import { AddTextEntryDialog, BoardTextEntries } from "@/components/text-entries"
-import { Button, ConfirmDialog, Field, Input, Modal, Segmented, Select } from "@/components/ui"
-import { listCompanies } from "@/data/metrics"
+import { Button, ConfirmDialog, Field, Input, KpiCard, Modal, Segmented, Select } from "@/components/ui"
+import { computeKpis, listCompanies } from "@/data/metrics"
 import { useWorkspace } from "@/data/store"
 import { LABEL_COLUMN_ID, type BoardGroup, type BoardRow, type Column, type ColumnKind } from "@/data/types"
 import { cn } from "@/lib/cn"
@@ -44,6 +44,8 @@ export function CustomBoardScreen({ boardId }: { boardId: string }) {
 
   const firmName = listCompanies(workspace).find((company) => company.id === board.firmId)?.name ?? "Firm"
   const pendingCopy = describePending(pending, board.title, firmName)
+  const kpis = computeKpis(board, board.firmId)
+  const showTiles = board.kpis.length > 0 && board.kpisHidden !== true
 
   function commitCell(groupId: string, rowId: string, columnId: string, value: string, previous: string) {
     if (value === previous) return
@@ -91,6 +93,13 @@ export function CustomBoardScreen({ boardId }: { boardId: string }) {
               <Plus />
               Add table
             </Button>
+            <Button
+              variant="outline"
+              onClick={() => dispatch({ type: "set-kpis-hidden", boardId, hidden: showTiles })}
+            >
+              <PanelTop />
+              {showTiles ? "Remove tiles" : "Add tiles"}
+            </Button>
             <Button variant="ghost" onClick={() => setPending({ kind: "board" })}>
               <Trash2 />
               Delete board
@@ -98,6 +107,14 @@ export function CustomBoardScreen({ boardId }: { boardId: string }) {
           </div>
         ) : null}
       </header>
+
+      {showTiles && kpis.length > 0 ? (
+        <section className={cn("grid gap-3 sm:grid-cols-2", kpis.length >= 4 ? "xl:grid-cols-4" : "xl:grid-cols-3")}>
+          {kpis.map((kpi) => (
+            <KpiCard key={kpi.id} label={kpi.label} value={kpi.value} delta={kpi.deltaPct} compareLabel={kpi.compareLabel} />
+          ))}
+        </section>
+      ) : null}
 
       <BoardTextEntries board={board} companyId={board.firmId} />
 

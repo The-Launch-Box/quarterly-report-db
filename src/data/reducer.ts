@@ -1,4 +1,4 @@
-import { listCompanies } from "./metrics"
+import { isValueColumn, listCompanies } from "./metrics"
 import { firmRatioRows, headcountMixRows } from "./seed"
 import {
   LABEL_COLUMN_ID,
@@ -11,6 +11,7 @@ import {
   type BoardRow,
   type Column,
   type ColumnKind,
+  type KpiDef,
   type TextEntry,
   type Workspace,
   type YtdCustomTable,
@@ -296,7 +297,7 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
       if (!title || title.length > 60 || !tableId || !columnId || columnId === LABEL_COLUMN_ID) return workspace
       if (tableId === STATEMENT_TABLE_ID || tableId === RATIOS_TABLE_ID) return workspace
       const board = workspace.boards.find((item) => item.id === action.boardId)
-      if (!board || board.id !== "ytd" || board.firmId) return workspace
+      if (!board || board.firmId) return workspace
       if (board.ytdCustomTables?.some((table) => table.id === tableId)) return workspace
       const table: YtdCustomTable = {
         id: tableId,
@@ -319,7 +320,7 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
     case "rename-ytd-table": {
       const title = action.title.trim()
       if (!title || title.length > 60) return workspace
-      const board = ytdBoard(workspace, action.boardId)
+      const board = portfolioBoard(workspace, action.boardId)
       if (!board?.ytdCustomTables?.some((table) => table.id === action.tableId)) return workspace
       return mapBoard(workspace, action.boardId, (current) => ({
         ...current,
@@ -329,7 +330,7 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
       }))
     }
     case "delete-ytd-table": {
-      const board = ytdBoard(workspace, action.boardId)
+      const board = portfolioBoard(workspace, action.boardId)
       if (!board?.ytdCustomTables?.some((table) => table.id === action.tableId)) return workspace
       return mapBoard(workspace, action.boardId, (current) => {
         const tables = current.ytdCustomTables?.filter((table) => table.id !== action.tableId) ?? []
@@ -344,7 +345,7 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
       })
     }
     case "move-ytd-table": {
-      const board = ytdBoard(workspace, action.boardId)
+      const board = portfolioBoard(workspace, action.boardId)
       if (!board) return workspace
       const next = moveInOrder(ytdSectionOrder(board), action.tableId, action.direction)
       if (!next) return workspace
@@ -356,7 +357,7 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
       if (!name || name.length > 60 || !columnId || columnId === LABEL_COLUMN_ID || !COLUMN_KINDS.has(action.kind)) {
         return workspace
       }
-      const board = ytdBoard(workspace, action.boardId)
+      const board = portfolioBoard(workspace, action.boardId)
       const table = board?.ytdCustomTables?.find((item) => item.id === action.tableId)
       if (!table || table.columns.some((column) => column.id === columnId)) return workspace
       const column: Column = { id: columnId, name, kind: action.kind }
@@ -368,7 +369,7 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
     case "rename-ytd-column": {
       const name = action.name.trim()
       if (!name || name.length > 60) return workspace
-      const board = ytdBoard(workspace, action.boardId)
+      const board = portfolioBoard(workspace, action.boardId)
       const table = board?.ytdCustomTables?.find((item) => item.id === action.tableId)
       if (!table?.columns.some((column) => column.id === action.columnId)) return workspace
       return mapYtdTable(workspace, action.boardId, action.tableId, (item) => ({
@@ -378,7 +379,7 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
     }
     case "delete-ytd-column": {
       if (action.columnId === LABEL_COLUMN_ID) return workspace
-      const board = ytdBoard(workspace, action.boardId)
+      const board = portfolioBoard(workspace, action.boardId)
       const table = board?.ytdCustomTables?.find((item) => item.id === action.tableId)
       if (!table?.columns.some((column) => column.id === action.columnId)) return workspace
       return mapBoard(workspace, action.boardId, (current) => ({
@@ -411,7 +412,7 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
       if (!Number.isFinite(action.width)) return workspace
       const width = Math.round(action.width)
       if (width < MIN_COLUMN_WIDTH) return workspace
-      const board = ytdBoard(workspace, action.boardId)
+      const board = portfolioBoard(workspace, action.boardId)
       const table = board?.ytdCustomTables?.find((item) => item.id === action.tableId)
       const column = table?.columns.find((item) => item.id === action.columnId)
       if (!table || !column || column.width === width) return workspace
@@ -423,7 +424,7 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
       }))
     }
     case "add-ytd-row": {
-      const board = ytdBoard(workspace, action.boardId)
+      const board = portfolioBoard(workspace, action.boardId)
       if (!board?.ytdCustomTables?.some((table) => table.id === action.tableId)) return workspace
       if (!board.groups.some((group) => group.id === action.groupId)) return workspace
       return mapBoard(workspace, action.boardId, (current) => ({
@@ -439,7 +440,7 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
       }))
     }
     case "delete-ytd-row": {
-      const board = ytdBoard(workspace, action.boardId)
+      const board = portfolioBoard(workspace, action.boardId)
       const rows = board?.groups.find((group) => group.id === action.groupId)?.customRows?.[action.tableId]
       if (!rows?.some((row) => row.id === action.rowId)) return workspace
       return mapBoard(workspace, action.boardId, (current) => ({
@@ -462,31 +463,28 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
       const name = action.name.trim()
       if (!name) return workspace
       const groupId = crypto.randomUUID()
-      const ytd = workspace.boards.find((board) => board.id === "ytd")
-      const customRows = ytd ? starterCustomRows(ytd) : undefined
       return {
         ...workspace,
-        boards: workspace.boards.map((board) =>
-          board.firmId
-            ? board
-            : {
-                ...board,
-                groups: [
-                  ...board.groups,
-                  {
-                    id: groupId,
-                    name,
-                    rows: [
-                      { id: crypto.randomUUID(), cells: { [LABEL_COLUMN_ID]: "New line" } },
-                      ...(board.id === "headcount" ? headcountMixRows(groupId) : []),
-                    ],
-                    ...(board.id === "ytd"
-                      ? { ratios: firmRatioRows(groupId), ...(customRows ? { customRows } : {}) }
-                      : {}),
-                  },
+        boards: workspace.boards.map((board) => {
+          if (board.firmId) return board
+          const customRows = starterCustomRows(board)
+          return {
+            ...board,
+            groups: [
+              ...board.groups,
+              {
+                id: groupId,
+                name,
+                rows: [
+                  { id: crypto.randomUUID(), cells: { [LABEL_COLUMN_ID]: "New line" } },
+                  ...(board.id === "headcount" ? headcountMixRows(groupId) : []),
                 ],
+                ...(board.id === "ytd" ? { ratios: firmRatioRows(groupId) } : {}),
+                ...(customRows ? { customRows } : {}),
               },
-        ),
+            ],
+          }
+        }),
       }
     }
     case "rename-company": {
@@ -532,11 +530,20 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
     }
     case "set-kpis-hidden": {
       const board = workspace.boards.find((item) => item.id === action.boardId)
-      if (!board || board.kpis.length === 0 || (board.kpisHidden === true) === action.hidden) return workspace
+      if (!board) return workspace
+      if (action.hidden) {
+        if (board.kpis.length === 0 || board.kpisHidden === true) return workspace
+        return mapBoard(workspace, action.boardId, (current) => ({ ...current, kpisHidden: true }))
+      }
+      if (board.kpis.length > 0 && board.kpisHidden !== true) return workspace
+      if (board.kpis.length === 0 && defaultKpis(board).length === 0) return workspace
       return mapBoard(workspace, action.boardId, (current) => {
         const next = { ...current }
-        if (action.hidden) next.kpisHidden = true
-        else delete next.kpisHidden
+        delete next.kpisHidden
+        if (next.kpis.length > 0) return next
+        const kpis = defaultKpis(next)
+        if (kpis.length === 0) return current
+        next.kpis = kpis
         return next
       })
     }
@@ -767,10 +774,20 @@ function mapBoard(workspace: Workspace, boardId: string, mapper: (board: Board) 
   }
 }
 
-function ytdBoard(workspace: Workspace, boardId: string): Board | undefined {
+function portfolioBoard(workspace: Workspace, boardId: string): Board | undefined {
   const board = workspace.boards.find((item) => item.id === boardId)
-  if (!board || board.id !== "ytd" || board.firmId) return undefined
+  if (!board || board.firmId) return undefined
   return board
+}
+
+function defaultKpis(board: Board): KpiDef[] {
+  const values = board.columns.filter(isValueColumn)
+  const ordered = [...values.filter((column) => !column.formula), ...values.filter((column) => column.formula)]
+  return ordered.slice(0, 4).map((column) => ({
+    id: `tile-${column.id}`,
+    label: column.name,
+    columnId: column.id,
+  }))
 }
 
 function mapYtdTable(

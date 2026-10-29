@@ -8,7 +8,7 @@ import { BoardTable } from "@/components/board-table"
 import { CustomBoardScreen } from "@/components/custom-board"
 import { YtdOperatingResults } from "@/components/operating-results"
 import { AddTextEntryDialog, BoardTextEntries } from "@/components/text-entries"
-import { YtdSections } from "@/components/ytd-sections"
+import { ExtraTables, YtdSections } from "@/components/ytd-sections"
 import { Button, ConfirmDialog, Field, Input, KpiCard, Modal, Segmented, Select } from "@/components/ui"
 import { computeKpis, listCompanies } from "@/data/metrics"
 import { useWorkspace } from "@/data/store"
@@ -96,12 +96,10 @@ function BoardScreen({ boardId }: { boardId: string }) {
               <Plus />
               Add text
             </Button>
-            {board.id === "ytd" ? (
-              <Button onClick={() => setTableOpen(true)}>
-                <Plus />
-                Add table
-              </Button>
-            ) : null}
+            <Button onClick={() => setTableOpen(true)}>
+              <Plus />
+              Add table
+            </Button>
             <Button onClick={() => setColumnOpen(true)}>
               <Plus />
               Add column
@@ -110,15 +108,13 @@ function BoardScreen({ boardId }: { boardId: string }) {
               <Plus />
               Add firm
             </Button>
-            {board.kpis.length > 0 ? (
-              <Button
-                variant="outline"
-                onClick={() => dispatch({ type: "set-kpis-hidden", boardId, hidden: board.kpisHidden !== true })}
-              >
-                <PanelTop />
-                {board.kpisHidden ? "Add tiles" : "Remove tiles"}
-              </Button>
-            ) : null}
+            <Button
+              variant="outline"
+              onClick={() => dispatch({ type: "set-kpis-hidden", boardId, hidden: tilesShown(board) })}
+            >
+              <PanelTop />
+              {tilesShown(board) ? "Remove tiles" : "Add tiles"}
+            </Button>
             <Button variant="ghost" onClick={() => setPending({ kind: "reset" })}>
               <RotateCcw />
               Reset boards
@@ -127,7 +123,7 @@ function BoardScreen({ boardId }: { boardId: string }) {
         ) : null}
       </header>
 
-      {!board.kpisHidden && kpis.length > 0 ? (
+      {tilesShown(board) && kpis.length > 0 ? (
         <section className={cn("grid gap-3 sm:grid-cols-2", kpis.length >= 4 ? "xl:grid-cols-4" : "xl:grid-cols-3")}>
           {kpis.map((kpi) => (
             <KpiCard key={kpi.id} label={kpi.label} value={kpi.value} delta={kpi.deltaPct} compareLabel={kpi.compareLabel} />
@@ -169,14 +165,17 @@ function BoardScreen({ boardId }: { boardId: string }) {
           onDeleteStatementColumn={(id, name) => setPending({ kind: "column", id, name })}
         />
       ) : (
-        <BoardTable
-          board={board}
-          companyId={companyId}
-          canDeleteCompany={companies.length > 1}
-          onAddColumn={() => setColumnOpen(true)}
-          onDeleteCompany={(id, name) => setPending({ kind: "company", id, name })}
-          onDeleteColumn={(id, name) => setPending({ kind: "column", id, name })}
-        />
+        <>
+          <BoardTable
+            board={board}
+            companyId={companyId}
+            canDeleteCompany={companies.length > 1}
+            onAddColumn={() => setColumnOpen(true)}
+            onDeleteCompany={(id, name) => setPending({ kind: "company", id, name })}
+            onDeleteColumn={(id, name) => setPending({ kind: "column", id, name })}
+          />
+          <ExtraTables board={board} companyId={companyId} />
+        </>
       )}
       {view === "table" ? null : <BoardChart key={board.id} board={board} companyId={companyId} />}
 
@@ -354,6 +353,10 @@ function CompanyForm({ onDone }: { onDone: () => void }) {
       </div>
     </form>
   )
+}
+
+function tilesShown(board: { kpis: readonly unknown[]; kpisHidden?: boolean }): boolean {
+  return board.kpis.length > 0 && board.kpisHidden !== true
 }
 
 function readKind(value: string): ColumnKind {

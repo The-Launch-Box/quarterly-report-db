@@ -17,6 +17,33 @@ const COLUMN_KINDS: { value: ColumnKind; label: string }[] = [
   { value: "status", label: "Status" },
 ]
 
+export function ExtraTables({ board, companyId }: { board: Board; companyId: string }) {
+  const { dispatch } = useWorkspace()
+  const tables = board.ytdCustomTables ?? []
+  if (tables.length === 0 || board.id === "ytd") return null
+  const order = ytdSectionOrder(board)
+
+  return (
+    <div className="space-y-8">
+      {order.map((tableId, index) => {
+        const table = tables.find((item) => item.id === tableId)
+        if (!table) return null
+        return (
+          <CustomYtdTable
+            key={table.id}
+            board={board}
+            table={table}
+            companyId={companyId}
+            index={index}
+            count={order.length}
+            onMove={(direction) => dispatch({ type: "move-ytd-table", boardId: board.id, tableId, direction })}
+          />
+        )
+      })}
+    </div>
+  )
+}
+
 export function YtdSections({
   board,
   companyId,

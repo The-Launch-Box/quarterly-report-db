@@ -669,6 +669,20 @@ export function headcountMixRows(groupId: string): BoardRow[] {
   return HEADCOUNT_MIX.map((line) => mixStat(`${groupId}-${slug(line.name)}`, line.name, line.mix, null))
 }
 
+/** Puts the starter summary tiles back on a shared board that was saved without them. */
+export function withSeedKpis(workspace: Workspace): Workspace {
+  const seed = createSeedWorkspace()
+  let changed = false
+  const boards = workspace.boards.map((board) => {
+    if (board.firmId || board.kpis.length > 0) return board
+    const kpis = seed.boards.find((item) => item.id === board.id)?.kpis
+    if (!kpis || kpis.length === 0) return board
+    changed = true
+    return { ...board, kpis: kpis.map((kpi) => ({ ...kpi })) }
+  })
+  return changed ? { ...workspace, boards } : workspace
+}
+
 /** Turns older percent rows, stored as 70, into the table rows the pies read. */
 export function withHeadcountMix(workspace: Workspace): Workspace {
   let changed = false

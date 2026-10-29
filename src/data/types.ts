@@ -90,7 +90,7 @@ export interface BoardGroup {
   metrics?: Record<string, string>
 }
 
-/** A table added on YTD. Every firm shares the columns and keeps its own rows. */
+/** A table added on a shared board. Every firm shares the columns and keeps its own rows. */
 export interface YtdCustomTable {
   id: string
   title: string
@@ -135,7 +135,7 @@ export interface Board {
   firmRatios?: boolean
   /** Set on a board created for one firm. Portfolio boards leave this unset. */
   firmId?: string
-  /** Tables added on YTD, after Financial results and Ratios. */
+  /** Tables added on a shared board. On YTD they follow Financial results and Ratios. */
   ytdCustomTables?: YtdCustomTable[]
   /** Order of the YTD tables. Built-in ids are "statement" and "ratios". */
   ytdTableOrder?: string[]

@@ -26,7 +26,7 @@ import {
 import { parseWorkspace } from "../src/data/persist"
 import { keepFirmBoards, reducer } from "../src/data/reducer"
 import { commitHtml, editorHtml, sanitizeRichText } from "../src/data/rich-text"
-import { createSeedWorkspace, IMPROV_OPERATING_RESULTS, seedProblems, varianceStatus, withExpectedColumn, withFirmRatios, withHeadcountMix, withImprovDeck, withoutRetiredStatuses, withoutYtdSubtitle } from "../src/data/seed"
+import { createSeedWorkspace, IMPROV_OPERATING_RESULTS, seedProblems, varianceStatus, withExpectedColumn, withFirmRatios, withHeadcountMix, withImprovDeck, withSeedKpis, withoutRetiredStatuses, withoutYtdSubtitle } from "../src/data/seed"
 import { EXPECTED_COLUMN_ID, LABEL_COLUMN_ID, MAX_COLUMN_WIDTH, type Board, type Column, type Workspace } from "../src/data/types"
 import { RATIOS_TABLE_ID, STATEMENT_TABLE_ID, ytdSectionOrder } from "../src/data/ytd-tables"
 
@@ -798,8 +798,30 @@ const ytdBoard = must(seed.boards.find((board) => board.id === "ytd"), "ytd boar
 if (ytdSectionOrder(ytdBoard).join(",") !== `${STATEMENT_TABLE_ID},${RATIOS_TABLE_ID}`) {
   throw new Error("YTD tables should start as financial results, then ratios")
 }
-if (reducer(seed, { type: "add-ytd-table", boardId: "headcount", tableId: "extra", columnId: "notes", title: "Nope" }) !== seed) {
-  throw new Error("headcount accepted a YTD table")
+const headcountTable = reducer(seed, { type: "add-ytd-table", boardId: "headcount", tableId: "extra", columnId: "notes", title: "Notes" })
+const headcountWithTable = must(headcountTable.boards.find((board) => board.id === "headcount"), "headcount with a table")
+if (headcountWithTable.ytdCustomTables?.[0]?.title !== "Notes") throw new Error("headcount did not add a table")
+if (ytdSectionOrder(headcountWithTable).join(",") !== "extra") throw new Error("headcount table order included YTD sections")
+if (!headcountWithTable.groups.every((group) => group.customRows?.extra?.length === 3)) {
+  throw new Error("headcount table did not start with three rows for each firm")
+}
+if (headcountTable.boards.find((board) => board.id === "revenue")?.ytdCustomTables) {
+  throw new Error("adding a headcount table changed revenue goals")
+}
+const hiredAfterTable = reducer(headcountTable, { type: "add-company", name: "Northwind Notes" })
+const hiredNotes = hiredAfterTable.boards
+  .find((board) => board.id === "headcount")
+  ?.groups.find((group) => group.name === "Northwind Notes")
+if (hiredNotes?.customRows?.extra?.length !== 3) throw new Error("a new firm missed the headcount table")
+if (hiredAfterTable.boards.find((board) => board.id === "ytd")?.groups.find((group) => group.name === "Northwind Notes")?.customRows) {
+  throw new Error("a headcount table was copied onto YTD")
+}
+const firmShared = reducer(seed, { type: "add-board", boardId: "board-shared", firmId: "echelon", title: "Shared" })
+if (
+  reducer(firmShared, { type: "add-ytd-table", boardId: "board-shared", tableId: "extra", columnId: "notes", title: "Nope" }) !==
+  firmShared
+) {
+  throw new Error("a firm board accepted a shared table")
 }
 if (reducer(seed, { type: "add-ytd-table", boardId: "ytd", tableId: STATEMENT_TABLE_ID, columnId: "notes", title: "Nope" }) !== seed) {
   throw new Error("the financial results table was replaced")
@@ -1305,6 +1327,31 @@ const firmTiles = reducer(seed, { type: "add-board", boardId: "board-tiles", fir
 if (reducer(firmTiles, { type: "set-kpis-hidden", boardId: "board-tiles", hidden: true }) !== firmTiles) {
   throw new Error("a board without tiles hid them")
 }
+if (reducer(firmTiles, { type: "set-kpis-hidden", boardId: "board-tiles", hidden: false }) !== firmTiles) {
+  throw new Error("add tiles invented a summary without a number column")
+}
+const currencyBoard = reducer(firmTiles, { type: "add-column", boardId: "board-tiles", name: "Amount", kind: "currency" })
+const withTiles = reducer(currencyBoard, { type: "set-kpis-hidden", boardId: "board-tiles", hidden: false })
+const tileBoard = must(withTiles.boards.find((board) => board.id === "board-tiles"), "tiles board")
+if (tileBoard.kpis.length !== 1 || tileBoard.kpis[0]?.label !== "Amount" || tileBoard.kpisHidden) {
+  throw new Error("add tiles did not create a summary")
+}
+const hiddenCustom = reducer(withTiles, { type: "set-kpis-hidden", boardId: "board-tiles", hidden: true })
+if (hiddenCustom.boards.find((board) => board.id === "board-tiles")?.kpisHidden !== true) {
+  throw new Error("custom board tiles were not hidden")
+}
+const strippedKpis = {
+  ...seed,
+  boards: seed.boards.map((board) => (board.id === "headcount" || board.id === "revenue" ? { ...board, kpis: [] } : board)),
+}
+const restoredKpis = withSeedKpis(strippedKpis)
+if (restoredKpis.boards.find((board) => board.id === "headcount")?.kpis.length !== 3) {
+  throw new Error("headcount tiles were not restored")
+}
+if (restoredKpis.boards.find((board) => board.id === "revenue")?.kpis.length !== 3) {
+  throw new Error("revenue tiles were not restored")
+}
+if (withSeedKpis(seed) !== seed) throw new Error("starter tiles were rewritten")
 const roundTiles = must(parseWorkspace(JSON.parse(JSON.stringify(hiddenTiles)) as unknown), "hidden tiles round trip")
 const roundRevenue = must(roundTiles.boards.find((board) => board.id === "revenue"), "hidden revenue")
 if (roundRevenue.kpisHidden !== true || roundRevenue.kpis.length !== 3) throw new Error("hidden tiles dropped on save")

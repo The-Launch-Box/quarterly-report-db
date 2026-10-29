@@ -10,10 +10,11 @@ const BUILTIN_TITLES: Record<string, string> = {
   [RATIOS_TABLE_ID]: "Ratios",
 }
 
-/** Financial results, then Ratios, then any tables added later, unless a saved order says otherwise. */
+/** On YTD: Financial results, then Ratios, then added tables. Other boards list only added tables. */
 export function ytdSectionOrder(board: Board): string[] {
   const custom = board.ytdCustomTables?.map((table) => table.id) ?? []
-  const known = [STATEMENT_TABLE_ID, RATIOS_TABLE_ID, ...custom]
+  const builtins = board.id === "ytd" ? [STATEMENT_TABLE_ID, RATIOS_TABLE_ID] : []
+  const known = [...builtins, ...custom]
   const knownIds = new Set(known)
   const saved = (board.ytdTableOrder ?? []).filter((id, index, list) => knownIds.has(id) && list.indexOf(id) === index)
   return [...saved, ...known.filter((id) => !saved.includes(id))]
