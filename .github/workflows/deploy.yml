@@ -30,13 +30,10 @@ jobs:
         env:
           VITE_AZURE_CLIENT_ID: ${{ secrets.VITE_AZURE_CLIENT_ID }}
           VITE_AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-        run: npx vite build
-
-      - name: Install runtime dependencies
-        run: rm -rf node_modules && npm ci --omit=dev
+        run: npx vite build && npx esbuild server/index.ts --bundle --platform=node --format=esm --outfile=server.mjs
 
       - name: Package
-        run: zip -qr deploy.zip dist server src package.json package-lock.json node_modules
+        run: zip -qr deploy.zip dist server.mjs package.json
 
       - name: Deploy to Azure App Service
         id: deploy
