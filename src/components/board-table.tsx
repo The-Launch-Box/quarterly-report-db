@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react"
 import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react"
 
-import { aggregateColumn, cellNumber, formatColumnValue } from "@/data/metrics"
+import { aggregateColumn, cellNumber, formatColumnValue, measuredColumn } from "@/data/metrics"
 import { formatCurrency, formatNumber, formatPercent, parseNumber, parsePercentInput } from "@/data/format"
 import { useWorkspace } from "@/data/store"
 import { LABEL_COLUMN_ID, STATUS_VALUES, type Board, type BoardRow, type Column, type ColumnKind, type StatusValue } from "@/data/types"
@@ -459,12 +459,13 @@ export function EditableCell({
   onCommit: (value: string) => void
   placeholder?: string
 }) {
-  if (column.formula || !editable) {
-    return <ReadOnlyValue column={column} columns={columns} row={row} raw={raw} calculated={Boolean(column.formula)} />
+  const shown = measuredColumn(column, row)
+  if (shown.formula || !editable) {
+    return <ReadOnlyValue column={shown} columns={columns} row={row} raw={raw} calculated={Boolean(shown.formula)} />
   }
-  if (column.kind === "status") return <StatusCell raw={raw} ariaLabel={ariaLabel} onCommit={onCommit} />
-  if (column.kind === "text") return <TextCell raw={raw} ariaLabel={ariaLabel} onCommit={onCommit} placeholder={placeholder} />
-  return <NumericCell kind={column.kind} decimals={column.decimals} raw={raw} ariaLabel={ariaLabel} onCommit={onCommit} />
+  if (shown.kind === "status") return <StatusCell raw={raw} ariaLabel={ariaLabel} onCommit={onCommit} />
+  if (shown.kind === "text") return <TextCell raw={raw} ariaLabel={ariaLabel} onCommit={onCommit} placeholder={placeholder} />
+  return <NumericCell kind={shown.kind} decimals={shown.decimals} raw={raw} ariaLabel={ariaLabel} onCommit={onCommit} />
 }
 
 function ReadOnlyValue({

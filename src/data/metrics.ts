@@ -37,6 +37,7 @@ export function uniqueLabels(board: Board): string[] {
   const labels: string[] = []
   for (const group of board.groups) {
     for (const row of group.rows) {
+      if (row.measure) continue
       const label = (row.cells[LABEL_COLUMN_ID] ?? "").trim()
       if (!label || seen.has(label)) continue
       seen.add(label)
@@ -46,8 +47,16 @@ export function uniqueLabels(board: Board): string[] {
   return labels
 }
 
+/** A ratio row keeps its own figures in the currency columns. */
+export function measuredColumn(column: Column, row: BoardRow): Column {
+  if (!row.measure || column.kind !== "currency") return column
+  return { ...column, kind: row.measure, decimals: row.measure === "percent" ? 0 : 2, formula: undefined }
+}
+
 export function cellNumber(column: Column, row: BoardRow, columns: Column[], depth = 0): number | null {
   if (depth > 4) return null
+  const shown = measuredColumn(column, row)
+  if (shown !== column) return storedNumber(shown, row.cells[column.id])
   const formula = column.formula
   if (formula?.op === "sum") {
     let total = 0
@@ -177,6 +186,7 @@ export function plotRows(board: Board, companyId: string, grain: "company" | "li
   const plots: PlotRow[] = []
   for (const group of groups) {
     for (const row of group.rows) {
+      if (row.measure) continue
       const label = (row.cells[LABEL_COLUMN_ID] ?? "").trim()
       if (lineFilter && label.toLowerCase() !== lineFilter.toLowerCase()) continue
       const values: Record<string, number | null> = {}

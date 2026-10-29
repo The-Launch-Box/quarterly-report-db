@@ -62,6 +62,7 @@ function readBoard(value: unknown): Board | null {
     columns,
     groups,
     kpis,
+    ...(value.ratioRows === true ? { ratioRows: true as const } : {}),
     ...(value.firmRatios === true ? { firmRatios: true as const } : {}),
     ...(typeof value.firmId === "string" ? { firmId: value.firmId.trim() } : {}),
   }
@@ -143,6 +144,7 @@ function readRow(value: unknown, nested: boolean): BoardRow | null {
   if (value.omitFromRollup !== undefined && value.omitFromRollup !== true) return null
   const row: BoardRow = { id: value.id, cells }
   if (value.omitFromRollup === true) row.omitFromRollup = true
+  if (value.measure === "percent" || value.measure === "number") row.measure = value.measure
   if (value.subrows !== undefined) {
     if (nested || !Array.isArray(value.subrows)) return null
     const subrows: BoardRow[] = []

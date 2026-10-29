@@ -66,6 +66,8 @@ export interface BoardRow {
   cells: Record<string, string>
   /** Leave this row out of company sums, portfolio totals, and KPI rollups. */
   omitFromRollup?: boolean
+  /** Show the money columns as a percent or a plain number, and keep YTD as its own figure. */
+  measure?: "percent" | "number"
   /** One level of nested rows on a firm board. Hidden until that row is expanded. */
   subrows?: BoardRow[]
 }
@@ -102,7 +104,9 @@ export interface Board {
   columns: Column[]
   groups: BoardGroup[]
   kpis: KpiDef[]
-  /** YTD firm-ratio columns were added. A later delete of one of those columns stays deleted. */
+  /** YTD ratio rows were added under income. A later delete of one of those rows stays deleted. */
+  ratioRows?: boolean
+  /** Older saves stored the ratios as columns. Those saves still load, then the rows replace the columns. */
   firmRatios?: boolean
   /** Set on a board created for one firm. Portfolio boards leave this unset. */
   firmId?: string
