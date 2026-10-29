@@ -104,7 +104,7 @@ export function BoardChart({ board, companyId }: { board: Board; companyId: stri
             value={grain}
             onChange={(value) => setGrain(value === "line" ? "line" : "company")}
             options={[
-              { value: "company", label: "Companies" },
+              { value: "company", label: "Firms" },
               { value: "line", label: "Line items" },
             ]}
             className="w-40"
@@ -509,8 +509,8 @@ function chartDescription(chartType: ChartType, grain: Grain, aggregateRows: boo
       : "Gross margin and profit margin for each quarter."
   }
   if (chartType === "pie") return "Share of the selected column. Zero and negative values are omitted."
-  if (grain === "company" && aggregateRows) return "Each mark is a company total. The graph updates when a cell commits."
-  if (grain === "company") return `Each mark is ${line || "the selected line"} by company. The graph updates when a cell commits.`
+  if (grain === "company" && aggregateRows) return "Each mark is a firm total. The graph updates when a cell commits."
+  if (grain === "company") return `Each mark is ${line || "the selected line"} by firm. The graph updates when a cell commits.`
   return "Each mark is a line item. The graph updates when a cell commits."
 }
 

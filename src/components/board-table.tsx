@@ -38,16 +38,14 @@ export function BoardTable({
     setFlash({ rowId, token: flashCount.current })
   }
 
-  function commitFirmMetric(groupId: string, rowId: string, columnId: string, value: string) {
+  function commitFirmMetric(groupId: string, columnId: string, value: string) {
     dispatch({ type: "set-firm-metric", boardId: board.id, groupId, columnId, value })
-    flashCount.current += 1
-    setFlash({ rowId, token: flashCount.current })
   }
 
   if (groups.length === 0) {
     return (
       <div className="rounded-lg border border-border bg-card px-4 py-8 text-sm text-muted-foreground">
-        No companies on this board. Add a company to start a table.
+        No firms on this board. Add a firm to start a table.
       </div>
     )
   }
@@ -172,7 +170,7 @@ function GroupRows({
   flash: { rowId: string; token: number } | null
   onToggle: () => void
   onCommit: (groupId: string, rowId: string, columnId: string, value: string, previous: string) => void
-  onCommitMetric: (groupId: string, rowId: string, columnId: string, value: string) => void
+  onCommitMetric: (groupId: string, columnId: string, value: string) => void
   onRename: (name: string) => void
   onAddRow: () => void
   onDeleteRow: (rowId: string) => void
@@ -180,12 +178,14 @@ function GroupRows({
 }) {
   const group = board.groups.find((item) => item.id === groupId)
   if (!group) return null
-  const span = board.columns.length + (canEdit ? 1 : 0)
+  const firmAt = board.columns.findIndex((column) => column.scope === "firm")
+  const prefix = firmAt === -1 ? board.columns.length : firmAt
+  const tail = firmAt === -1 ? [] : board.columns.slice(firmAt)
 
   return (
     <>
       <tr>
-        <td colSpan={span} className="group-rule border-b border-border-soft bg-bg-raised p-0" data-brand={groupId}>
+        <td colSpan={prefix} className="group-rule border-b border-border-soft bg-bg-raised p-0" data-brand={groupId}>
           <div className="sticky left-0 flex w-fit items-center gap-2 px-2 py-1.5">
             <Button variant="ghost" size="icon" aria-expanded={!collapsed} aria-label={`${collapsed ? "Expand" : "Collapse"} ${groupName}`} onClick={onToggle}>
               {collapsed ? <ChevronRight /> : <ChevronDown />}
@@ -208,6 +208,25 @@ function GroupRows({
             ) : null}
           </div>
         </td>
+        {tail.map((column) => {
+          const raw = group.metrics?.[column.id] ?? ""
+          return (
+            <td key={column.id} className="border-b border-border-soft bg-bg-raised px-1 py-1">
+              {column.scope === "firm" ? (
+                <CellControl
+                  column={column}
+                  columns={board.columns}
+                  row={{ id: group.id, cells: {} }}
+                  raw={raw}
+                  editable={canEdit}
+                  ariaLabel={`${column.name} for ${groupName}`}
+                  onCommit={(value) => onCommitMetric(groupId, column.id, value)}
+                />
+              ) : null}
+            </td>
+          )
+        })}
+        {canEdit ? <td className="border-b border-border-soft bg-bg-raised" /> : null}
       </tr>
       {collapsed
         ? null
@@ -217,8 +236,7 @@ function GroupRows({
             return (
               <tr key={row.id} className="group">
                 {board.columns.map((column) => {
-                  const firm = column.scope === "firm"
-                  const previous = firm ? (group.metrics?.[column.id] ?? "") : (row.cells[column.id] ?? "")
+                  const previous = row.cells[column.id] ?? ""
                   return (
                     <td
                       key={column.id}
@@ -229,19 +247,19 @@ function GroupRows({
                       )}
                     >
                       {token !== null ? <span key={token} className="cell-flash pointer-events-none absolute inset-0" /> : null}
-                      <CellControl
-                        column={column}
-                        columns={board.columns}
-                        row={row}
-                        raw={previous}
-                        editable={canEdit}
-                        ariaLabel={`${column.name} for ${firm ? groupName : `${rowLabel} at ${groupName}`}`}
-                        onCommit={(value) =>
-                          firm
-                            ? onCommitMetric(groupId, row.id, column.id, value)
-                            : onCommit(groupId, row.id, column.id, value, previous)
-                        }
-                      />
+                      {column.scope === "firm" ? (
+                        <span className="block h-8" />
+                      ) : (
+                        <CellControl
+                          column={column}
+                          columns={board.columns}
+                          row={row}
+                          raw={previous}
+                          editable={canEdit}
+                          ariaLabel={`${column.name} for ${rowLabel} at ${groupName}`}
+                          onCommit={(value) => onCommit(groupId, row.id, column.id, value, previous)}
+                        />
+                      )}
                     </td>
                   )
                 })}
@@ -366,7 +384,7 @@ function CompanyName({ name, brandId, onCommit }: { name: string; brandId: strin
 
   return (
     <Input
-      aria-label={`Company name ${name}`}
+      aria-label={`Firm name ${name}`}
       data-brand={brandId}
       value={draft}
       onChange={(event) => setDraft(event.target.value)}

@@ -74,7 +74,7 @@ function BoardScreen({ boardId }: { boardId: string }) {
       <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <p className="text-[11px] uppercase tracking-widest text-muted-foreground">
-            {company ? company.name : "All companies"} · FY2026
+            {company ? company.name : "All firms"} · FY2026
           </p>
           <h1 className="mt-1 text-4xl leading-none">{board.title}</h1>
           {board.subtitle ? <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{board.subtitle}</p> : null}
@@ -87,7 +87,7 @@ function BoardScreen({ boardId }: { boardId: string }) {
             </Button>
             <Button variant="outline" onClick={() => setCompanyOpen(true)}>
               <Plus />
-              Add company
+              Add firm
             </Button>
             <Button variant="ghost" onClick={() => setPending({ kind: "reset" })}>
               <RotateCcw />
@@ -208,7 +208,7 @@ function AddColumnDialog({ boardId, open, onClose }: { boardId: string; open: bo
     <Modal
       open={open}
       title="Add column"
-      description="Adds a column on this board. Every company gets the new cells."
+      description="Adds a column on this board. Every firm gets the new cells."
       onClose={onClose}
     >
       {open ? <ColumnForm boardId={boardId} onDone={onClose} /> : null}
@@ -261,8 +261,8 @@ function AddCompanyDialog({ open, onClose }: { open: boolean; onClose: () => voi
   return (
     <Modal
       open={open}
-      title="Add company"
-      description="Adds the company to YTD results, headcount, and revenue goals."
+      title="Add firm"
+      description="Adds the firm to YTD results, headcount, and revenue goals."
       onClose={onClose}
     >
       {open ? <CompanyForm onDone={onClose} /> : null}
@@ -301,7 +301,7 @@ function CompanyForm({ onDone }: { onDone: () => void }) {
         <Button variant="outline" onClick={onDone}>
           Cancel
         </Button>
-        <Button type="submit">Add company</Button>
+        <Button type="submit">Add firm</Button>
       </div>
     </form>
   )
@@ -314,7 +314,7 @@ function readKind(value: string): ColumnKind {
 
 function pendingTitle(pending: Pending): string {
   if (pending?.kind === "reset") return "Reset boards?"
-  if (pending?.kind === "company") return "Delete company?"
+  if (pending?.kind === "company") return "Delete firm?"
   if (pending?.kind === "column") return "Delete column?"
   return "Confirm"
 }
@@ -328,7 +328,7 @@ function pendingDescription(pending: Pending): string {
 
 function pendingLabel(pending: Pending): string {
   if (pending?.kind === "reset") return "Reset boards"
-  if (pending?.kind === "company") return "Delete company"
+  if (pending?.kind === "company") return "Delete firm"
   if (pending?.kind === "column") return "Delete column"
   return "Confirm"
 }

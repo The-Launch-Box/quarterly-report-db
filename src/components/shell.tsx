@@ -19,7 +19,7 @@ export function Shell() {
   const { workspace, companyId, setCompanyId, canEdit, statusLabel, statusTone, saving, save } = useWorkspace()
   const companies = listCompanies(workspace)
   const portco = companyId === "all" ? null : portcoId(companyId)
-  const options = [{ value: "all", label: "All companies" }, ...companies.map((company) => ({ value: company.id, label: company.name }))]
+  const options = [{ value: "all", label: "All firms" }, ...companies.map((company) => ({ value: company.id, label: company.name }))]
 
   return (
     <div className="flex h-full overflow-hidden bg-background text-foreground">
@@ -43,10 +43,10 @@ export function Shell() {
             <BoardLink key={item.to} {...item} />
           ))}
         </nav>
-        <p className="mt-6 px-4 text-[11px] uppercase tracking-widest text-muted-foreground">Companies</p>
+        <p className="mt-6 px-4 text-[11px] uppercase tracking-widest text-muted-foreground">Firms</p>
         <div className="mt-2 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2 pb-4">
           <CompanyButton active={companyId === "all"} onClick={() => setCompanyId("all")}>
-            All companies
+            All firms
           </CompanyButton>
           {companies.map((company) => (
             <CompanyButton key={company.id} active={companyId === company.id} onClick={() => setCompanyId(company.id)}>
@@ -59,7 +59,7 @@ export function Shell() {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex flex-wrap items-center gap-3 border-b border-border bg-card px-4 py-3">
           <p className="text-[11px] uppercase tracking-widest text-muted-foreground">FY2026 · Q4 open</p>
-          <Select label="Company" value={companyId} onChange={setCompanyId} options={options} className="w-[220px]" />
+          <Select label="Firm" value={companyId} onChange={setCompanyId} options={options} className="w-[220px]" />
           <div className="ml-auto flex items-center gap-2">
             <p className="inline-flex items-center gap-2 text-xs text-muted-foreground">
               <span className={cn("size-1.5 rounded-full", statusTone === "warn" ? "bg-warning" : "bg-positive")} aria-hidden="true" />
