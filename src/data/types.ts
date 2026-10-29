@@ -82,8 +82,17 @@ export interface BoardGroup {
   operatingResults?: string
   /** The firm's ratio table. Kept apart from the income-statement lines. */
   ratios?: BoardRow[]
+  /** Rows for extra YTD tables, keyed by table id. */
+  customRows?: Record<string, BoardRow[]>
   /** Firm-level ratios, keyed by column id. Older saves used this; the ratio table replaces it. */
   metrics?: Record<string, string>
+}
+
+/** A table added on YTD. Every firm shares the columns and keeps its own rows. */
+export interface YtdCustomTable {
+  id: string
+  title: string
+  columns: Column[]
 }
 
 export interface KpiDef {
@@ -114,6 +123,10 @@ export interface Board {
   firmRatios?: boolean
   /** Set on a board created for one firm. Portfolio boards leave this unset. */
   firmId?: string
+  /** Tables added on YTD, after Financial results and Ratios. */
+  ytdCustomTables?: YtdCustomTable[]
+  /** Order of the YTD tables. Built-in ids are "statement" and "ratios". */
+  ytdTableOrder?: string[]
 }
 
 export interface Workspace {

@@ -11,7 +11,9 @@ import {
   type Formula,
   type KpiDef,
   type Workspace,
+  type YtdCustomTable,
 } from "./types"
+import { RATIOS_TABLE_ID, STATEMENT_TABLE_ID } from "./ytd-tables"
 
 const COLUMN_KINDS = new Set<ColumnKind>(["text", "number", "currency", "percent", "status"])
 
@@ -54,6 +56,22 @@ function readBoard(value: unknown): Board | null {
     }
   }
   if (value.firmId !== undefined && (typeof value.firmId !== "string" || value.firmId.trim() === "")) return null
+  let ytdCustomTables: YtdCustomTable[] | undefined
+  if (value.ytdCustomTables !== undefined) {
+    const tables = readYtdCustomTables(value.ytdCustomTables)
+    if (!tables) return null
+    if (tables.length > 0) ytdCustomTables = tables
+  }
+  let ytdTableOrder: string[] | undefined
+  if (value.ytdTableOrder !== undefined) {
+    if (!Array.isArray(value.ytdTableOrder)) return null
+    const order: string[] = []
+    for (const id of value.ytdTableOrder) {
+      if (typeof id !== "string" || id.trim() === "" || id.length > 80) return null
+      order.push(id)
+    }
+    if (order.length > 0) ytdTableOrder = order
+  }
   return {
     id: value.id,
     title: value.title,
@@ -66,7 +84,32 @@ function readBoard(value: unknown): Board | null {
     ...(value.ratioRows === true ? { ratioRows: true as const } : {}),
     ...(value.firmRatios === true ? { firmRatios: true as const } : {}),
     ...(typeof value.firmId === "string" ? { firmId: value.firmId.trim() } : {}),
+    ...(ytdCustomTables ? { ytdCustomTables } : {}),
+    ...(ytdTableOrder ? { ytdTableOrder } : {}),
   }
+}
+
+function readYtdCustomTables(value: unknown): YtdCustomTable[] | null {
+  if (!Array.isArray(value)) return null
+  const tables: YtdCustomTable[] = []
+  const seen = new Set<string>()
+  for (const entry of value) {
+    if (!isRecord(entry) || typeof entry.id !== "string" || typeof entry.title !== "string") return null
+    const title = entry.title.trim()
+    if (!title || title.length > 60 || entry.id.trim() === "" || entry.id.length > 80) return null
+    if (entry.id === STATEMENT_TABLE_ID || entry.id === RATIOS_TABLE_ID || seen.has(entry.id)) return null
+    if (!Array.isArray(entry.columns)) return null
+    const columns: Column[] = []
+    for (const columnEntry of entry.columns) {
+      const column = readColumn(columnEntry)
+      if (!column) return null
+      columns.push(column)
+    }
+    if (!columns.some((column) => column.id === LABEL_COLUMN_ID && column.kind === "text")) return null
+    seen.add(entry.id)
+    tables.push({ id: entry.id, title, columns })
+  }
+  return tables
 }
 
 function readColumn(value: unknown): Column | null {
@@ -144,6 +187,21 @@ function readGroup(value: unknown): BoardGroup | null {
       ratios.push(row)
     }
     if (ratios.length > 0) group.ratios = ratios
+  }
+  if (value.customRows !== undefined) {
+    if (!isRecord(value.customRows)) return null
+    const customRows: Record<string, BoardRow[]> = {}
+    for (const [tableId, rows] of Object.entries(value.customRows)) {
+      if (tableId.trim() === "" || tableId.length > 80 || !Array.isArray(rows)) return null
+      const parsed: BoardRow[] = []
+      for (const entry of rows) {
+        const row = readRow(entry, false)
+        if (!row) return null
+        parsed.push(row)
+      }
+      customRows[tableId] = parsed
+    }
+    if (Object.keys(customRows).length > 0) group.customRows = customRows
   }
   return group
 }

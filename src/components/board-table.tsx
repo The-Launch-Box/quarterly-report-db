@@ -21,14 +21,14 @@ export function FirmRatioTables({ board, companyId }: { board: Board; companyId:
   const groups = (companyId === "all" ? board.groups : board.groups.filter((group) => group.id === companyId)).filter(
     (group) => (group.ratios?.length ?? 0) > 0,
   )
-  if (groups.length === 0) return null
+  if (groups.length === 0) {
+    return <p className="text-sm text-muted-foreground">No ratio rows yet.</p>
+  }
 
   return (
-    <section className="space-y-3">
-      <h2 className="text-xl">Ratios</h2>
-      <div className="overflow-auto rounded-lg border border-border bg-card">
-        <table className="w-full min-w-[40rem] border-separate border-spacing-0 text-sm">
-          <caption className="sr-only">Ratios</caption>
+    <div className="overflow-auto rounded-lg border border-border bg-card">
+      <table className="w-full min-w-[40rem] border-separate border-spacing-0 text-sm">
+        <caption className="sr-only">Ratios</caption>
           <thead>
             <tr>
               {RATIO_COLUMNS.map((column) => (
@@ -97,8 +97,7 @@ export function FirmRatioTables({ board, companyId }: { board: Board; companyId:
             ))}
           </tbody>
         </table>
-      </div>
-    </section>
+    </div>
   )
 }
 

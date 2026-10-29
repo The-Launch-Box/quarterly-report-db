@@ -1,6 +1,6 @@
 import { Fragment, useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router"
-import { BarChart3, ChevronDown, ChevronRight, Columns2, Plus, Table2, Trash2 } from "lucide-react"
+import { BarChart3, ChevronDown, ChevronRight, ChevronUp, Columns2, Plus, Table2, Trash2 } from "lucide-react"
 
 import { EditableCell } from "@/components/board-table"
 import { FirmChart } from "@/components/firm-chart"
@@ -108,7 +108,7 @@ export function CustomBoardScreen({ boardId }: { boardId: string }) {
 
       {view === "chart" ? null : (
         <div className="space-y-8">
-          {board.groups.map((group) => (
+          {board.groups.map((group, index) => (
             <FirmTable
               key={group.id}
               boardTitle={board.title}
@@ -116,6 +116,9 @@ export function CustomBoardScreen({ boardId }: { boardId: string }) {
               columns={group.columns ?? board.columns}
               canEdit={canEdit}
               canDelete={board.groups.length > 1}
+              canMoveUp={index > 0}
+              canMoveDown={index < board.groups.length - 1}
+              onMove={(direction) => dispatch({ type: "move-table", boardId, groupId: group.id, direction })}
               flash={flash}
               onCommit={(rowId, columnId, value, previous) => commitCell(group.id, rowId, columnId, value, previous)}
               onAddRow={() => dispatch({ type: "add-row", boardId, groupId: group.id })}
@@ -188,6 +191,9 @@ function FirmTable({
   columns,
   canEdit,
   canDelete,
+  canMoveUp,
+  canMoveDown,
+  onMove,
   flash,
   onCommit,
   onAddRow,
@@ -206,6 +212,9 @@ function FirmTable({
   columns: Column[]
   canEdit: boolean
   canDelete: boolean
+  canMoveUp: boolean
+  canMoveDown: boolean
+  onMove: (direction: "up" | "down") => void
   flash: { rowId: string; token: number } | null
   onCommit: (rowId: string, columnId: string, value: string, previous: string) => void
   onAddRow: () => void
@@ -329,6 +338,18 @@ function FirmTable({
         <TableTitle title={group.name} canEdit={canEdit} onRename={onRename} />
         {canEdit ? (
           <div className="flex flex-wrap items-center gap-2">
+            {canMoveUp || canMoveDown ? (
+              <>
+                <Button variant="outline" disabled={!canMoveUp} aria-label={`Move ${group.name} up`} onClick={() => onMove("up")}>
+                  <ChevronUp />
+                  Move up
+                </Button>
+                <Button variant="outline" disabled={!canMoveDown} aria-label={`Move ${group.name} down`} onClick={() => onMove("down")}>
+                  <ChevronDown />
+                  Move down
+                </Button>
+              </>
+            ) : null}
             <Button onClick={onAddColumn}>
               <Plus />
               Add column

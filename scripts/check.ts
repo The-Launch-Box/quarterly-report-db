@@ -27,6 +27,7 @@ import { keepFirmBoards, reducer } from "../src/data/reducer"
 import { commitHtml, editorHtml, sanitizeRichText } from "../src/data/rich-text"
 import { createSeedWorkspace, IMPROV_OPERATING_RESULTS, seedProblems, varianceStatus, withExpectedColumn, withFirmRatios, withImprovDeck, withoutRetiredStatuses, withoutYtdSubtitle } from "../src/data/seed"
 import { EXPECTED_COLUMN_ID, LABEL_COLUMN_ID, MAX_COLUMN_WIDTH, type Board, type Column, type Workspace } from "../src/data/types"
+import { RATIOS_TABLE_ID, STATEMENT_TABLE_ID, ytdSectionOrder } from "../src/data/ytd-tables"
 
 function must<T>(value: T | undefined | null, message: string): T {
   if (value === undefined || value === null) throw new Error(message)
@@ -237,6 +238,22 @@ if (reducer(custom, { type: "delete-table", boardId: "board-pipeline", groupId: 
 const droppedTable = reducer(withTable, { type: "delete-table", boardId: "board-pipeline", groupId: "table-ratios" })
 if (droppedTable.boards.find((board) => board.id === "board-pipeline")?.groups.length !== 1) {
   throw new Error("table was not deleted")
+}
+if (reducer(withTable, { type: "move-table", boardId: "board-pipeline", groupId: pipelineGroup.id, direction: "up" }) !== withTable) {
+  throw new Error("the first table moved up")
+}
+if (reducer(seed, { type: "move-table", boardId: "ytd", groupId: "improv", direction: "down" }) !== seed) {
+  throw new Error("a portfolio firm was reordered as a table")
+}
+const movedTable = reducer(withTable, { type: "move-table", boardId: "board-pipeline", groupId: "table-ratios", direction: "up" })
+const movedBoard = must(movedTable.boards.find((board) => board.id === "board-pipeline"), "moved tables")
+if (movedBoard.groups[0]?.id !== "table-ratios" || movedBoard.groups[1]?.id !== pipelineGroup.id) {
+  throw new Error("table order did not change")
+}
+if (movedBoard.columns !== movedBoard.groups[0]?.columns) throw new Error("board columns did not follow the first table")
+const movedBack = reducer(movedTable, { type: "move-table", boardId: "board-pipeline", groupId: "table-ratios", direction: "down" })
+if (movedBack.boards.find((board) => board.id === "board-pipeline")?.groups[1]?.id !== "table-ratios") {
+  throw new Error("table did not move back down")
 }
 const parsedTables = parseWorkspace(JSON.parse(JSON.stringify(widened)) as unknown)
 if (parsedTables?.boards.find((board) => board.id === "board-pipeline")?.groups[1]?.columns?.some((column) => column.name === "Target") !== true) {
@@ -663,6 +680,85 @@ const addedGroup = must(addedYtd.groups.find((group) => group.name === "Northwin
 if (addedGroup.ratios?.length !== ratioNames.length) throw new Error("a new firm did not get a ratio table")
 if (addedFirm.boards.find((board) => board.id === "headcount")?.groups.find((group) => group.name === "Northwind Ratios")?.ratios) {
   throw new Error("headcount received a ratio table")
+}
+const ytdBoard = must(seed.boards.find((board) => board.id === "ytd"), "ytd board")
+if (ytdSectionOrder(ytdBoard).join(",") !== `${STATEMENT_TABLE_ID},${RATIOS_TABLE_ID}`) {
+  throw new Error("YTD tables should start as financial results, then ratios")
+}
+if (reducer(seed, { type: "add-ytd-table", boardId: "headcount", tableId: "extra", columnId: "notes", title: "Nope" }) !== seed) {
+  throw new Error("headcount accepted a YTD table")
+}
+if (reducer(seed, { type: "add-ytd-table", boardId: "ytd", tableId: STATEMENT_TABLE_ID, columnId: "notes", title: "Nope" }) !== seed) {
+  throw new Error("the financial results table was replaced")
+}
+const withYtdTable = reducer(seed, { type: "add-ytd-table", boardId: "ytd", tableId: "pipeline", columnId: "notes", title: "  Pipeline " })
+const pipelineYtd = must(withYtdTable.boards.find((board) => board.id === "ytd"), "ytd with a new table")
+if (pipelineYtd.ytdCustomTables?.[0]?.title !== "Pipeline") throw new Error("YTD table was not added")
+if (ytdSectionOrder(pipelineYtd).join(",") !== `${STATEMENT_TABLE_ID},${RATIOS_TABLE_ID},pipeline`) {
+  throw new Error("a new YTD table was not placed last")
+}
+const pipelineFirm = must(pipelineYtd.groups.find((group) => group.id === "improv"), "improv pipeline rows")
+const pipelineRows = pipelineFirm.customRows?.pipeline
+if (pipelineRows?.length !== 3 || pipelineRows.some((row) => row.cells[LABEL_COLUMN_ID])) {
+  throw new Error("a new YTD table did not start with three blank rows for each firm")
+}
+const pipelineCell = must(pipelineRows?.[0], "pipeline row")
+const filledPipeline = reducer(withYtdTable, {
+  type: "set-cell",
+  boardId: "ytd",
+  groupId: "improv",
+  rowId: pipelineCell.id,
+  columnId: "notes",
+  value: "12",
+})
+if (
+  filledPipeline.boards
+    .find((board) => board.id === "ytd")
+    ?.groups.find((group) => group.id === "improv")
+    ?.customRows?.pipeline?.[0]?.cells.notes !== "12"
+) {
+  throw new Error("a cell on the new YTD table did not save")
+}
+if (
+  filledPipeline.boards.find((board) => board.id === "ytd")?.groups.find((group) => group.id === "improv")?.rows.some((row) => row.cells.notes)
+) {
+  throw new Error("a YTD table cell landed on the income statement")
+}
+const ratiosFirst = reducer(withYtdTable, { type: "move-ytd-table", boardId: "ytd", tableId: RATIOS_TABLE_ID, direction: "up" })
+const ratiosFirstBoard = must(ratiosFirst.boards.find((board) => board.id === "ytd"), "ratios first")
+if (ytdSectionOrder(ratiosFirstBoard).join(",") !== `${RATIOS_TABLE_ID},${STATEMENT_TABLE_ID},pipeline`) {
+  throw new Error("ratios did not move above financial results")
+}
+if (reducer(ratiosFirst, { type: "move-ytd-table", boardId: "ytd", tableId: RATIOS_TABLE_ID, direction: "up" }) !== ratiosFirst) {
+  throw new Error("the first YTD table moved further up")
+}
+const namedYtd = reducer(withYtdTable, { type: "rename-ytd-table", boardId: "ytd", tableId: "pipeline", title: "Deals" })
+if (namedYtd.boards.find((board) => board.id === "ytd")?.ytdCustomTables?.[0]?.title !== "Deals") {
+  throw new Error("YTD table was not renamed")
+}
+const firmAfterTable = reducer(withYtdTable, { type: "add-company", name: "Northwind Pipeline" })
+const firmRows = firmAfterTable.boards
+  .find((board) => board.id === "ytd")
+  ?.groups.find((group) => group.name === "Northwind Pipeline")?.customRows?.pipeline
+if (firmRows?.length !== 3) throw new Error("a new firm did not get the extra table")
+if (firmAfterTable.boards.find((board) => board.id === "headcount")?.groups.find((group) => group.name === "Northwind Pipeline")?.customRows) {
+  throw new Error("headcount received an extra YTD table")
+}
+const droppedYtdTable = reducer(filledPipeline, { type: "delete-ytd-table", boardId: "ytd", tableId: "pipeline" })
+const droppedYtd = must(droppedYtdTable.boards.find((board) => board.id === "ytd"), "ytd without the extra table")
+if (droppedYtd.ytdCustomTables || droppedYtd.groups.some((group) => group.customRows?.pipeline)) {
+  throw new Error("the extra YTD table was not deleted")
+}
+if (ytdSectionOrder(droppedYtd).join(",") !== `${STATEMENT_TABLE_ID},${RATIOS_TABLE_ID}`) {
+  throw new Error("deleting a table left it in the order")
+}
+const roundYtdTables = must(parseWorkspace(JSON.parse(JSON.stringify(ratiosFirst)) as unknown), "ytd table round trip")
+const roundPipeline = must(roundYtdTables.boards.find((board) => board.id === "ytd"), "round trip extra table")
+if (ytdSectionOrder(roundPipeline).join(",") !== `${RATIOS_TABLE_ID},${STATEMENT_TABLE_ID},pipeline`) {
+  throw new Error("YTD table order dropped on save")
+}
+if (roundPipeline.ytdCustomTables?.[0]?.title !== "Pipeline" || roundPipeline.ytdCustomTables[0].columns.length !== 2) {
+  throw new Error("YTD table columns dropped on save")
 }
 
 const droppedRatios = structuredClone(seed)

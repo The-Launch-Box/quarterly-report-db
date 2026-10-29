@@ -3,9 +3,10 @@ import { useParams } from "react-router"
 import { BarChart3, Columns2, Plus, RotateCcw, Table2 } from "lucide-react"
 
 import { BoardChart } from "@/components/board-chart"
-import { BoardTable, FirmRatioTables } from "@/components/board-table"
+import { BoardTable } from "@/components/board-table"
 import { CustomBoardScreen } from "@/components/custom-board"
 import { YtdOperatingResults } from "@/components/operating-results"
+import { YtdSections } from "@/components/ytd-sections"
 import { Button, ConfirmDialog, Field, Input, KpiCard, Modal, Segmented, Select } from "@/components/ui"
 import { computeKpis, listCompanies } from "@/data/metrics"
 import { useWorkspace } from "@/data/store"
@@ -55,6 +56,7 @@ function BoardScreen({ boardId }: { boardId: string }) {
   const board = workspace.boards.find((item) => item.id === boardId)
   const [view, setView] = useState<ViewMode>("split")
   const [columnOpen, setColumnOpen] = useState(false)
+  const [tableOpen, setTableOpen] = useState(false)
   const [companyOpen, setCompanyOpen] = useState(false)
   const [pending, setPending] = useState<Pending>(null)
   if (!board) return null
@@ -83,6 +85,12 @@ function BoardScreen({ boardId }: { boardId: string }) {
         </div>
         {canEdit ? (
           <div className="flex flex-wrap items-center gap-2">
+            {board.id === "ytd" ? (
+              <Button onClick={() => setTableOpen(true)}>
+                <Plus />
+                Add table
+              </Button>
+            ) : null}
             <Button onClick={() => setColumnOpen(true)}>
               <Plus />
               Add column
@@ -127,7 +135,16 @@ function BoardScreen({ boardId }: { boardId: string }) {
         />
       </div>
 
-      {view === "chart" ? null : (
+      {view === "chart" ? null : board.id === "ytd" ? (
+        <YtdSections
+          board={board}
+          companyId={companyId}
+          canDeleteCompany={companies.length > 1}
+          onAddStatementColumn={() => setColumnOpen(true)}
+          onDeleteCompany={(id, name) => setPending({ kind: "company", id, name })}
+          onDeleteStatementColumn={(id, name) => setPending({ kind: "column", id, name })}
+        />
+      ) : (
         <BoardTable
           board={board}
           companyId={companyId}
@@ -137,10 +154,10 @@ function BoardScreen({ boardId }: { boardId: string }) {
           onDeleteColumn={(id, name) => setPending({ kind: "column", id, name })}
         />
       )}
-      {view === "chart" || board.id !== "ytd" ? null : <FirmRatioTables board={board} companyId={companyId} />}
       {view === "table" ? null : <BoardChart key={board.id} board={board} companyId={companyId} />}
 
       <AddColumnDialog boardId={board.id} open={columnOpen} onClose={() => setColumnOpen(false)} />
+      <AddYtdTableDialog boardId={board.id} open={tableOpen} onClose={() => setTableOpen(false)} />
       <AddCompanyDialog open={companyOpen} onClose={() => setCompanyOpen(false)} />
       <ConfirmDialog
         open={pending !== null}
@@ -203,6 +220,62 @@ function ColumnForm({ boardId, onDone }: { boardId: string; onDone: () => void }
           Cancel
         </Button>
         <Button type="submit">Add column</Button>
+      </div>
+    </form>
+  )
+}
+
+function AddYtdTableDialog({ boardId, open, onClose }: { boardId: string; open: boolean; onClose: () => void }) {
+  return (
+    <Modal
+      open={open}
+      title="Add table"
+      description="Name the table. Every firm gets it, with a title column and one more column."
+      onClose={onClose}
+    >
+      {open ? <YtdTableForm boardId={boardId} onDone={onClose} /> : null}
+    </Modal>
+  )
+}
+
+function YtdTableForm({ boardId, onDone }: { boardId: string; onDone: () => void }) {
+  const { dispatch } = useWorkspace()
+  const [title, setTitle] = useState("")
+  const [error, setError] = useState("")
+
+  return (
+    <form
+      className="flex flex-col gap-4"
+      onSubmit={(event) => {
+        event.preventDefault()
+        const next = title.trim()
+        if (!next) {
+          setError("Enter a title.")
+          return
+        }
+        if (next.length > 60) {
+          setError("Use 60 characters or fewer.")
+          return
+        }
+        dispatch({
+          type: "add-ytd-table",
+          boardId,
+          tableId: crypto.randomUUID(),
+          columnId: crypto.randomUUID(),
+          title: next,
+        })
+        onDone()
+      }}
+    >
+      <Field label="Title" htmlFor="ytd-table-name">
+        <Input id="ytd-table-name" autoFocus maxLength={60} value={title} placeholder="Pipeline" onChange={(event) => setTitle(event.target.value)} />
+      </Field>
+      {error ? <p className="text-sm text-negative">{error}</p> : null}
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" onClick={onDone}>
+          Cancel
+        </Button>
+        <Button type="submit">Add table</Button>
       </div>
     </form>
   )
