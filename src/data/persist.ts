@@ -107,7 +107,18 @@ function readGroup(value: unknown): BoardGroup | null {
     if (!row) return null
     rows.push(row)
   }
-  const group: BoardGroup = { id: value.id, name: value.name, rows }
+  let columns: Column[] | undefined
+  if (value.columns !== undefined) {
+    if (!Array.isArray(value.columns)) return null
+    columns = []
+    for (const entry of value.columns) {
+      const column = readColumn(entry)
+      if (!column) return null
+      columns.push(column)
+    }
+    if (!columns.some((column) => column.id === LABEL_COLUMN_ID && column.kind === "text")) return null
+  }
+  const group: BoardGroup = { id: value.id, name: value.name, rows, ...(columns ? { columns } : {}) }
   if (value.operatingResults !== undefined) {
     if (typeof value.operatingResults !== "string") return null
     group.operatingResults = looksLikeHtml(value.operatingResults)

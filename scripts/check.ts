@@ -184,6 +184,61 @@ if (
 ) {
   throw new Error("an overlong board description was saved")
 }
+if (pipelineGroup.name !== "Table") throw new Error("custom board should start with one titled table")
+if (reducer(seed, { type: "add-table", boardId: "ytd", groupId: "extra", title: "Nope" }) !== seed) {
+  throw new Error("portfolio board accepted a table")
+}
+if (reducer(custom, { type: "add-table", boardId: "board-pipeline", groupId: "table-ratios", title: "  " }) !== custom) {
+  throw new Error("blank table title accepted")
+}
+const withTable = reducer(custom, { type: "add-table", boardId: "board-pipeline", groupId: "table-ratios", title: "  Ratios " })
+const ratioTable = must(withTable.boards.find((board) => board.id === "board-pipeline")?.groups[1], "ratios table")
+if (ratioTable.name !== "Ratios" || ratioTable.rows.length !== 3) throw new Error("table was not added")
+if (ratioTable.columns?.length !== 2 || ratioTable.columns[0]?.id !== LABEL_COLUMN_ID) throw new Error("new table columns")
+const ratioColumn = must(ratioTable.columns?.[1], "ratio column")
+const ratioRow = must(ratioTable.rows[0], "ratio row")
+const ratioFilled = reducer(withTable, {
+  type: "set-cell",
+  boardId: "board-pipeline",
+  groupId: ratioTable.id,
+  rowId: ratioRow.id,
+  columnId: ratioColumn.id,
+  value: "41%",
+})
+if (
+  ratioFilled.boards.find((board) => board.id === "board-pipeline")?.groups[1]?.rows[0]?.cells[ratioColumn.id] !== "41%"
+) {
+  throw new Error("cell on the new table did not save")
+}
+const widened = reducer(withTable, {
+  type: "add-column",
+  boardId: "board-pipeline",
+  groupId: "table-ratios",
+  name: "Target",
+  kind: "percent",
+})
+const widenedBoard = must(widened.boards.find((board) => board.id === "board-pipeline"), "widened board")
+if (widenedBoard.groups[1]?.columns?.some((column) => column.name === "Target") !== true) {
+  throw new Error("column was not added to the new table")
+}
+if ((widenedBoard.groups[0]?.columns ?? widenedBoard.columns).some((column) => column.name === "Target")) {
+  throw new Error("new table column landed on the first table")
+}
+const namedTable = reducer(withTable, { type: "rename-table", boardId: "board-pipeline", groupId: "table-ratios", title: "Margins" })
+if (namedTable.boards.find((board) => board.id === "board-pipeline")?.groups[1]?.name !== "Margins") {
+  throw new Error("table was not renamed")
+}
+if (reducer(custom, { type: "delete-table", boardId: "board-pipeline", groupId: pipelineGroup.id }) !== custom) {
+  throw new Error("the last table was deleted")
+}
+const droppedTable = reducer(withTable, { type: "delete-table", boardId: "board-pipeline", groupId: "table-ratios" })
+if (droppedTable.boards.find((board) => board.id === "board-pipeline")?.groups.length !== 1) {
+  throw new Error("table was not deleted")
+}
+const parsedTables = parseWorkspace(JSON.parse(JSON.stringify(widened)) as unknown)
+if (parsedTables?.boards.find((board) => board.id === "board-pipeline")?.groups[1]?.columns?.some((column) => column.name === "Target") !== true) {
+  throw new Error("table columns did not round trip")
+}
 const pipelineRow = must(pipelineGroup.rows[0], "pipeline row")
 const titled = reducer(custom, {
   type: "set-cell",

@@ -6,7 +6,7 @@ import { EditableCell } from "@/components/board-table"
 import { Button, ConfirmDialog, Field, Input, Modal, Select } from "@/components/ui"
 import { listCompanies } from "@/data/metrics"
 import { useWorkspace } from "@/data/store"
-import { LABEL_COLUMN_ID, type Column, type ColumnKind } from "@/data/types"
+import { LABEL_COLUMN_ID, type BoardGroup, type Column, type ColumnKind } from "@/data/types"
 import { cn } from "@/lib/cn"
 
 const COLUMN_KINDS: { value: ColumnKind; label: string }[] = [
@@ -17,21 +17,25 @@ const COLUMN_KINDS: { value: ColumnKind; label: string }[] = [
   { value: "status", label: "Status" },
 ]
 
-type Pending = { kind: "board" } | { kind: "column"; id: string; name: string } | null
+type Pending =
+  | { kind: "board" }
+  | { kind: "column"; groupId: string; id: string; name: string }
+  | { kind: "table"; id: string; name: string }
+  | null
 
 export function CustomBoardScreen({ boardId }: { boardId: string }) {
   const { workspace, dispatch, canEdit } = useWorkspace()
   const navigate = useNavigate()
   const board = workspace.boards.find((item) => item.id === boardId)
-  const [columnOpen, setColumnOpen] = useState(false)
+  const [columnGroupId, setColumnGroupId] = useState<string | null>(null)
+  const [tableOpen, setTableOpen] = useState(false)
   const [pending, setPending] = useState<Pending>(null)
   const [flash, setFlash] = useState<{ rowId: string; token: number } | null>(null)
   const flashCount = useRef(0)
   if (!board?.firmId) return null
 
   const firmName = listCompanies(workspace).find((company) => company.id === board.firmId)?.name ?? "Firm"
-  const group = board.groups[0]
-  const lines = board.groups.flatMap((item) => item.rows.map((row) => ({ groupId: item.id, row })))
+  const pendingCopy = describePending(pending, board.title, firmName)
 
   function commitCell(groupId: string, rowId: string, columnId: string, value: string, previous: string) {
     if (value === previous) return
@@ -40,18 +44,16 @@ export function CustomBoardScreen({ boardId }: { boardId: string }) {
     setFlash({ rowId, token: flashCount.current })
   }
 
-  function addRow() {
-    if (!group) return
-    dispatch({ type: "add-row", boardId, groupId: group.id })
-  }
-
   function confirmPending() {
     if (!pending) return
     if (pending.kind === "board") {
       dispatch({ type: "delete-board", boardId })
       navigate("/ytd")
     }
-    if (pending.kind === "column") dispatch({ type: "delete-column", boardId, columnId: pending.id })
+    if (pending.kind === "column") {
+      dispatch({ type: "delete-column", boardId, groupId: pending.groupId, columnId: pending.id })
+    }
+    if (pending.kind === "table") dispatch({ type: "delete-table", boardId, groupId: pending.id })
     setPending(null)
   }
 
@@ -73,13 +75,9 @@ export function CustomBoardScreen({ boardId }: { boardId: string }) {
         </div>
         {canEdit ? (
           <div className="flex flex-wrap items-center gap-2">
-            <Button onClick={() => setColumnOpen(true)}>
+            <Button onClick={() => setTableOpen(true)}>
               <Plus />
-              Add column
-            </Button>
-            <Button variant="outline" onClick={addRow}>
-              <Plus />
-              Add row
+              Add table
             </Button>
             <Button variant="ghost" onClick={() => setPending({ kind: "board" })}>
               <Trash2 />
@@ -89,12 +87,133 @@ export function CustomBoardScreen({ boardId }: { boardId: string }) {
         ) : null}
       </header>
 
+      <div className="space-y-8">
+        {board.groups.map((group) => (
+          <FirmTable
+            key={group.id}
+            boardTitle={board.title}
+            group={group}
+            columns={group.columns ?? board.columns}
+            canEdit={canEdit}
+            canDelete={board.groups.length > 1}
+            flash={flash}
+            onCommit={(rowId, columnId, value, previous) => commitCell(group.id, rowId, columnId, value, previous)}
+            onAddRow={() => dispatch({ type: "add-row", boardId, groupId: group.id })}
+            onAddColumn={() => setColumnGroupId(group.id)}
+            onRename={(title) => dispatch({ type: "rename-table", boardId, groupId: group.id, title })}
+            onRenameColumn={(columnId, name) =>
+              dispatch({ type: "rename-column", boardId, groupId: group.id, columnId, name })
+            }
+            onDeleteColumn={(id, name) => setPending({ kind: "column", groupId: group.id, id, name })}
+            onDeleteRow={(rowId) => dispatch({ type: "delete-row", boardId, groupId: group.id, rowId })}
+            onDelete={() => setPending({ kind: "table", id: group.id, name: group.name })}
+          />
+        ))}
+      </div>
+
+      <AddColumnDialog
+        boardId={board.id}
+        groupId={columnGroupId}
+        open={columnGroupId !== null}
+        onClose={() => setColumnGroupId(null)}
+      />
+      <AddTableDialog boardId={board.id} open={tableOpen} onClose={() => setTableOpen(false)} />
+      <ConfirmDialog
+        open={pending !== null}
+        title={pendingCopy.title}
+        description={pendingCopy.description}
+        confirmLabel={pendingCopy.confirmLabel}
+        onClose={() => setPending(null)}
+        onConfirm={confirmPending}
+      />
+    </div>
+  )
+}
+
+function describePending(pending: Pending, boardTitle: string, firmName: string) {
+  if (pending?.kind === "column") {
+    return {
+      title: "Delete column?",
+      description: `This removes ${pending.name} and the titles in its cells.`,
+      confirmLabel: "Delete column",
+    }
+  }
+  if (pending?.kind === "table") {
+    return {
+      title: "Delete table?",
+      description: `This removes ${pending.name} from ${boardTitle}.`,
+      confirmLabel: "Delete table",
+    }
+  }
+  return {
+    title: "Delete board?",
+    description: `This removes ${boardTitle} from ${firmName}.`,
+    confirmLabel: "Delete board",
+  }
+}
+
+function FirmTable({
+  boardTitle,
+  group,
+  columns,
+  canEdit,
+  canDelete,
+  flash,
+  onCommit,
+  onAddRow,
+  onAddColumn,
+  onRename,
+  onRenameColumn,
+  onDeleteColumn,
+  onDeleteRow,
+  onDelete,
+}: {
+  boardTitle: string
+  group: BoardGroup
+  columns: Column[]
+  canEdit: boolean
+  canDelete: boolean
+  flash: { rowId: string; token: number } | null
+  onCommit: (rowId: string, columnId: string, value: string, previous: string) => void
+  onAddRow: () => void
+  onAddColumn: () => void
+  onRename: (title: string) => void
+  onRenameColumn: (columnId: string, name: string) => void
+  onDeleteColumn: (columnId: string, name: string) => void
+  onDeleteRow: (rowId: string) => void
+  onDelete: () => void
+}) {
+  return (
+    <section className="space-y-3">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <TableTitle title={group.name} canEdit={canEdit} onRename={onRename} />
+        {canEdit ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button onClick={onAddColumn}>
+              <Plus />
+              Add column
+            </Button>
+            <Button variant="outline" onClick={onAddRow}>
+              <Plus />
+              Add row
+            </Button>
+            {canDelete ? (
+              <Button variant="ghost" onClick={onDelete}>
+                <Trash2 />
+                Delete table
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
       <div className="max-h-[70vh] overflow-auto rounded-lg border border-border bg-card">
         <table className="w-full min-w-[640px] border-separate border-spacing-0 text-sm">
-          <caption className="sr-only">{board.title}</caption>
+          <caption className="sr-only">
+            {group.name} on {boardTitle}
+          </caption>
           <thead>
             <tr>
-              {board.columns.map((column) => (
+              {columns.map((column) => (
                 <th
                   key={column.id}
                   scope="col"
@@ -107,21 +226,14 @@ export function CustomBoardScreen({ boardId }: { boardId: string }) {
                   )}
                 >
                   <div className={cn("flex items-center gap-1", isNumeric(column.kind) && "justify-end")}>
-                    <ColumnTitle
-                      column={column}
-                      onRename={
-                        canEdit
-                          ? (name) => dispatch({ type: "rename-column", boardId, columnId: column.id, name })
-                          : undefined
-                      }
-                    />
+                    <ColumnTitle column={column} onRename={canEdit ? (name) => onRenameColumn(column.id, name) : undefined} />
                     {canEdit && column.id !== LABEL_COLUMN_ID ? (
                       <Button
                         variant="ghost"
                         size="icon"
                         className="opacity-0 group-hover/col:opacity-100 focus-visible:opacity-100"
                         aria-label={`Delete ${column.name}`}
-                        onClick={() => setPending({ kind: "column", id: column.id, name: column.name })}
+                        onClick={() => onDeleteColumn(column.id, column.name)}
                       >
                         <Trash2 />
                       </Button>
@@ -131,7 +243,7 @@ export function CustomBoardScreen({ boardId }: { boardId: string }) {
               ))}
               {canEdit ? (
                 <th scope="col" className="sticky top-0 z-20 w-12 border-b border-border bg-card px-1">
-                  <Button variant="ghost" size="icon" aria-label="Add column" onClick={() => setColumnOpen(true)}>
+                  <Button variant="ghost" size="icon" aria-label={`Add column to ${group.name}`} onClick={onAddColumn}>
                     <Plus />
                   </Button>
                 </th>
@@ -139,12 +251,12 @@ export function CustomBoardScreen({ boardId }: { boardId: string }) {
             </tr>
           </thead>
           <tbody>
-            {lines.map(({ groupId, row }) => {
+            {group.rows.map((row) => {
               const rowLabel = row.cells[LABEL_COLUMN_ID]?.trim() || "untitled"
               const token = flash?.rowId === row.id ? flash.token : null
               return (
                 <tr key={row.id} className="group">
-                  {board.columns.map((column) => {
+                  {columns.map((column) => {
                     const previous = row.cells[column.id] ?? ""
                     return (
                       <td
@@ -157,13 +269,13 @@ export function CustomBoardScreen({ boardId }: { boardId: string }) {
                         {token !== null ? <span key={token} className="cell-flash pointer-events-none absolute inset-0" /> : null}
                         <EditableCell
                           column={column}
-                          columns={board.columns}
+                          columns={columns}
                           row={row}
                           raw={previous}
                           editable={canEdit}
                           placeholder={column.kind === "text" ? "Title" : undefined}
                           ariaLabel={`${column.name} for ${rowLabel}`}
-                          onCommit={(value) => commitCell(groupId, row.id, column.id, value, previous)}
+                          onCommit={(value) => onCommit(row.id, column.id, value, previous)}
                         />
                       </td>
                     )
@@ -175,7 +287,7 @@ export function CustomBoardScreen({ boardId }: { boardId: string }) {
                         size="icon"
                         className="opacity-40 group-hover:opacity-100 focus-visible:opacity-100"
                         aria-label={`Delete ${rowLabel}`}
-                        onClick={() => dispatch({ type: "delete-row", boardId, groupId, rowId: row.id })}
+                        onClick={() => onDeleteRow(row.id)}
                       >
                         <Trash2 />
                       </Button>
@@ -186,8 +298,8 @@ export function CustomBoardScreen({ boardId }: { boardId: string }) {
             })}
             {canEdit ? (
               <tr>
-                <td colSpan={board.columns.length + 1} className="px-2 py-1">
-                  <Button variant="ghost" size="sm" onClick={addRow}>
+                <td colSpan={columns.length + 1} className="px-2 py-1">
+                  <Button variant="ghost" size="sm" onClick={onAddRow}>
                     <Plus />
                     Add row
                   </Button>
@@ -197,21 +309,7 @@ export function CustomBoardScreen({ boardId }: { boardId: string }) {
           </tbody>
         </table>
       </div>
-
-      <AddColumnDialog boardId={board.id} open={columnOpen} onClose={() => setColumnOpen(false)} />
-      <ConfirmDialog
-        open={pending !== null}
-        title={pending?.kind === "column" ? "Delete column?" : "Delete board?"}
-        description={
-          pending?.kind === "column"
-            ? `This removes ${pending.name} and the titles in its cells.`
-            : `This removes ${board.title} from ${firmName}.`
-        }
-        confirmLabel={pending?.kind === "column" ? "Delete column" : "Delete board"}
-        onClose={() => setPending(null)}
-        onConfirm={confirmPending}
-      />
-    </div>
+    </section>
   )
 }
 
@@ -328,6 +426,56 @@ function BoardDescription({
   )
 }
 
+function TableTitle({ title, canEdit, onRename }: { title: string; canEdit: boolean; onRename: (title: string) => void }) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(title)
+  const cancel = useRef(false)
+  useEffect(() => setDraft(title), [title])
+
+  if (!editing || !canEdit) {
+    return (
+      <h2 className="text-2xl leading-none">
+        {canEdit ? (
+          <button type="button" className="text-left" title="Rename table" onClick={() => setEditing(true)}>
+            {title}
+          </button>
+        ) : (
+          title
+        )}
+      </h2>
+    )
+  }
+
+  return (
+    <input
+      autoFocus
+      aria-label="Table name"
+      maxLength={60}
+      value={draft}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={() => {
+        setEditing(false)
+        if (cancel.current) {
+          cancel.current = false
+          setDraft(title)
+          return
+        }
+        const next = draft.trim()
+        if (next && next !== title) onRename(next)
+        else setDraft(title)
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter") event.currentTarget.blur()
+        if (event.key === "Escape") {
+          cancel.current = true
+          event.currentTarget.blur()
+        }
+      }}
+      className="w-full max-w-xl bg-transparent font-display text-2xl leading-none uppercase text-foreground outline-none"
+    />
+  )
+}
+
 function ColumnTitle({ column, onRename }: { column: Column; onRename?: (name: string) => void }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(column.name)
@@ -372,15 +520,25 @@ function ColumnTitle({ column, onRename }: { column: Column; onRename?: (name: s
   )
 }
 
-function AddColumnDialog({ boardId, open, onClose }: { boardId: string; open: boolean; onClose: () => void }) {
+function AddColumnDialog({
+  boardId,
+  groupId,
+  open,
+  onClose,
+}: {
+  boardId: string
+  groupId: string | null
+  open: boolean
+  onClose: () => void
+}) {
   return (
     <Modal open={open} title="Add column" description="Name the column. Text cells under it can each have a title." onClose={onClose}>
-      {open ? <ColumnForm boardId={boardId} onDone={onClose} /> : null}
+      {open && groupId ? <ColumnForm boardId={boardId} groupId={groupId} onDone={onClose} /> : null}
     </Modal>
   )
 }
 
-function ColumnForm({ boardId, onDone }: { boardId: string; onDone: () => void }) {
+function ColumnForm({ boardId, groupId, onDone }: { boardId: string; groupId: string; onDone: () => void }) {
   const { dispatch } = useWorkspace()
   const [name, setName] = useState("")
   const [kind, setKind] = useState<ColumnKind>("text")
@@ -400,7 +558,7 @@ function ColumnForm({ boardId, onDone }: { boardId: string; onDone: () => void }
           setError("Use 60 characters or fewer.")
           return
         }
-        dispatch({ type: "add-column", boardId, name: next, kind })
+        dispatch({ type: "add-column", boardId, groupId, name: next, kind })
         onDone()
       }}
     >
@@ -423,6 +581,58 @@ function ColumnForm({ boardId, onDone }: { boardId: string; onDone: () => void }
           Cancel
         </Button>
         <Button type="submit">Add column</Button>
+      </div>
+    </form>
+  )
+}
+
+function AddTableDialog({ boardId, open, onClose }: { boardId: string; open: boolean; onClose: () => void }) {
+  return (
+    <Modal open={open} title="Add table" description="Name the table. It starts with a title column and one more column." onClose={onClose}>
+      {open ? <TableForm boardId={boardId} onDone={onClose} /> : null}
+    </Modal>
+  )
+}
+
+function TableForm({ boardId, onDone }: { boardId: string; onDone: () => void }) {
+  const { dispatch } = useWorkspace()
+  const [title, setTitle] = useState("")
+  const [error, setError] = useState("")
+
+  return (
+    <form
+      className="flex flex-col gap-4"
+      onSubmit={(event) => {
+        event.preventDefault()
+        const next = title.trim()
+        if (!next) {
+          setError("Enter a title.")
+          return
+        }
+        if (next.length > 60) {
+          setError("Use 60 characters or fewer.")
+          return
+        }
+        dispatch({ type: "add-table", boardId, groupId: crypto.randomUUID(), title: next })
+        onDone()
+      }}
+    >
+      <Field label="Title" htmlFor="custom-table-name">
+        <Input
+          id="custom-table-name"
+          autoFocus
+          maxLength={60}
+          value={title}
+          placeholder="Ratios"
+          onChange={(event) => setTitle(event.target.value)}
+        />
+      </Field>
+      {error ? <p className="text-sm text-negative">{error}</p> : null}
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" onClick={onDone}>
+          Cancel
+        </Button>
+        <Button type="submit">Add table</Button>
       </div>
     </form>
   )

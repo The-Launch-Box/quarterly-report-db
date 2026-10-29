@@ -55,6 +55,8 @@ export interface BoardGroup {
   id: string
   name: string
   rows: BoardRow[]
+  /** Columns for one titled table on a firm board. Portfolio groups use the board columns. */
+  columns?: Column[]
   /** Commentary on the YTD board. Plain text, or a small set of formatted HTML. */
   operatingResults?: string
   /** Firm-level ratios, keyed by column id. Shared by every line in the firm. */

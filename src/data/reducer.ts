@@ -1,5 +1,5 @@
 import { listCompanies } from "./metrics"
-import { LABEL_COLUMN_ID, type Board, type BoardRow, type Column, type ColumnKind, type Workspace } from "./types"
+import { LABEL_COLUMN_ID, type Board, type BoardGroup, type BoardRow, type Column, type ColumnKind, type Workspace } from "./types"
 
 const RESERVED_BOARD_IDS = new Set(["ytd", "headcount", "revenue"])
 
@@ -7,9 +7,12 @@ export type WorkspaceAction =
   | { type: "set-cell"; boardId: string; groupId: string; rowId: string; columnId: string; value: string }
   | { type: "add-row"; boardId: string; groupId: string }
   | { type: "delete-row"; boardId: string; groupId: string; rowId: string }
-  | { type: "add-column"; boardId: string; name: string; kind: ColumnKind }
-  | { type: "rename-column"; boardId: string; columnId: string; name: string }
-  | { type: "delete-column"; boardId: string; columnId: string }
+  | { type: "add-column"; boardId: string; groupId?: string; name: string; kind: ColumnKind }
+  | { type: "rename-column"; boardId: string; groupId?: string; columnId: string; name: string }
+  | { type: "delete-column"; boardId: string; groupId?: string; columnId: string }
+  | { type: "add-table"; boardId: string; groupId: string; title: string }
+  | { type: "rename-table"; boardId: string; groupId: string; title: string }
+  | { type: "delete-table"; boardId: string; groupId: string }
   | { type: "add-company"; name: string }
   | { type: "rename-company"; groupId: string; name: string }
   | { type: "delete-company"; groupId: string }
@@ -25,7 +28,8 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
   switch (action.type) {
     case "set-cell":
       return mapBoard(workspace, action.boardId, (board) => {
-        const column = board.columns.find((item) => item.id === action.columnId)
+        const group = board.groups.find((item) => item.id === action.groupId)
+        const column = (group ? tableColumns(board, group) : board.columns).find((item) => item.id === action.columnId)
         if (!column || column.formula || column.scope === "firm") return board
         return {
           ...board,
@@ -64,21 +68,75 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
       const name = action.name.trim()
       if (!name) return workspace
       const column: Column = { id: crypto.randomUUID(), name, kind: action.kind }
-      return mapBoard(workspace, action.boardId, (board) => ({
-        ...board,
-        columns: [...board.columns, column],
-      }))
+      return mapBoard(workspace, action.boardId, (board) => {
+        if (!board.firmId) return { ...board, columns: [...board.columns, column] }
+        return mapFirmTable(board, action.groupId, (group) => ({
+          ...group,
+          columns: [...tableColumns(board, group), column],
+        }))
+      })
     }
     case "rename-column": {
       const name = action.name.trim()
       if (!name) return workspace
-      return mapBoard(workspace, action.boardId, (board) => ({
-        ...board,
-        columns: board.columns.map((column) => (column.id === action.columnId ? { ...column, name } : column)),
-      }))
+      return mapBoard(workspace, action.boardId, (board) => {
+        if (!board.firmId) {
+          return {
+            ...board,
+            columns: board.columns.map((column) => (column.id === action.columnId ? { ...column, name } : column)),
+          }
+        }
+        return mapFirmTable(board, action.groupId, (group) => ({
+          ...group,
+          columns: tableColumns(board, group).map((column) =>
+            column.id === action.columnId ? { ...column, name } : column,
+          ),
+        }))
+      })
     }
     case "delete-column":
-      return mapBoard(workspace, action.boardId, (board) => deleteColumn(board, action.columnId))
+      return mapBoard(workspace, action.boardId, (board) => {
+        if (!board.firmId) return deleteColumn(board, action.columnId)
+        if (action.columnId === LABEL_COLUMN_ID) return board
+        return mapFirmTable(board, action.groupId, (group) => ({
+          ...group,
+          columns: tableColumns(board, group).flatMap((column) => {
+            const next = stripColumn(column, action.columnId)
+            return next ? [next] : []
+          }),
+          rows: group.rows.map((row) => ({ ...row, cells: withoutCell(row.cells, action.columnId) })),
+        }))
+      })
+    case "add-table": {
+      const title = action.title.trim()
+      if (!title || title.length > 60) return workspace
+      const board = workspace.boards.find((item) => item.id === action.boardId)
+      if (!board?.firmId || !action.groupId || board.groups.some((group) => group.id === action.groupId)) return workspace
+      return mapBoard(workspace, action.boardId, (current) => {
+        const owned = ownTableColumns(current)
+        const groups = [...owned.groups, blankTable(action.groupId, title)]
+        return { ...owned, columns: groups[0]?.columns ?? owned.columns, groups }
+      })
+    }
+    case "rename-table": {
+      const title = action.title.trim()
+      if (!title || title.length > 60) return workspace
+      const board = workspace.boards.find((item) => item.id === action.boardId)
+      if (!board?.firmId || !board.groups.some((group) => group.id === action.groupId)) return workspace
+      return mapBoard(workspace, action.boardId, (current) => ({
+        ...current,
+        groups: current.groups.map((group) => (group.id === action.groupId ? { ...group, name: title } : group)),
+      }))
+    }
+    case "delete-table": {
+      const board = workspace.boards.find((item) => item.id === action.boardId)
+      if (!board?.firmId || board.groups.length <= 1) return workspace
+      if (!board.groups.some((group) => group.id === action.groupId)) return workspace
+      return mapBoard(workspace, action.boardId, (current) => {
+        const groups = current.groups.filter((group) => group.id !== action.groupId)
+        return { ...current, columns: groups[0]?.columns ?? current.columns, groups }
+      })
+    }
     case "add-company": {
       const name = action.name.trim()
       if (!name) return workspace
@@ -202,7 +260,7 @@ function firmBoard(boardId: string, firmId: string, title: string): Board {
     groups: [
       {
         id: `group-${boardId}`,
-        name: "Items",
+        name: "Table",
         rows: [blankItem(), blankItem(), blankItem()],
       },
     ],
@@ -212,6 +270,39 @@ function firmBoard(boardId: string, firmId: string, title: string): Board {
 
 function blankItem(): BoardRow {
   return { id: crypto.randomUUID(), cells: { [LABEL_COLUMN_ID]: "" } }
+}
+
+function blankTable(groupId: string, title: string): BoardGroup {
+  return {
+    id: groupId,
+    name: title,
+    columns: [
+      { id: LABEL_COLUMN_ID, name: "Title", kind: "text" },
+      { id: crypto.randomUUID(), name: "Column", kind: "text" },
+    ],
+    rows: [blankItem(), blankItem(), blankItem()],
+  }
+}
+
+function tableColumns(board: Board, group: BoardGroup): Column[] {
+  return group.columns ?? board.columns
+}
+
+/** Give every table on a firm board its own column list. */
+function ownTableColumns(board: Board): Board {
+  if (board.groups.every((group) => group.columns)) return board
+  return {
+    ...board,
+    groups: board.groups.map((group) => (group.columns ? group : { ...group, columns: board.columns.map((column) => ({ ...column })) })),
+  }
+}
+
+function mapFirmTable(board: Board, groupId: string | undefined, mapper: (group: BoardGroup) => BoardGroup): Board {
+  const id = groupId ?? board.groups[0]?.id
+  if (!id || !board.groups.some((group) => group.id === id)) return board
+  const owned = ownTableColumns(board)
+  const groups = owned.groups.map((group) => (group.id === id ? mapper(group) : group))
+  return { ...owned, columns: groups[0]?.columns ?? owned.columns, groups }
 }
 
 function mapBoard(workspace: Workspace, boardId: string, mapper: (board: Board) => Board): Workspace {
