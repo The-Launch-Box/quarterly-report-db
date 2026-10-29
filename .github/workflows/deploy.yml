@@ -30,7 +30,7 @@ jobs:
         env:
           VITE_AZURE_CLIENT_ID: ${{ secrets.VITE_AZURE_CLIENT_ID }}
           VITE_AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
-        run: npx vite build && npx esbuild server/index.ts --bundle --platform=node --format=esm --outfile=server.mjs
+        run: npx vite build && npx esbuild server/index.ts --bundle --platform=node --format=esm --external:mysql2 --outfile=server.mjs
 
       - name: Package
         run: zip -qr deploy.zip dist server.mjs package.json

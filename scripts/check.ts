@@ -2,7 +2,12 @@ import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 
+import { renderToStaticMarkup } from "react-dom/server"
+
 import { isAdminEmail, isLaunchboxEmail, launchboxEmailFromClaims } from "../src/auth/access"
+import { CensusSection } from "../src/components/live-headcount"
+import { buildCensus, parseHeadcountCensus, terminationLabel, type HeadcountCensus } from "../src/data/headcount-census"
+import { savedCensus } from "../server/headcount-snapshot"
 import { resizeCeiling } from "../src/components/column-resize"
 import { firmTableMarks, trendSegment, trendValue } from "../src/data/firm-chart"
 import { formatCurrency, parseNumber, parsePercentInput } from "../src/data/format"
@@ -1404,7 +1409,103 @@ const roundTiles = must(parseWorkspace(JSON.parse(JSON.stringify(hiddenTiles)) a
 const roundRevenue = must(roundTiles.boards.find((board) => board.id === "revenue"), "hidden revenue")
 if (roundRevenue.kpisHidden !== true || roundRevenue.kpis.length !== 3) throw new Error("hidden tiles dropped on save")
 
+if (terminationLabel("Termination (Involuntary)", null) !== "Involuntary Termination") {
+  throw new Error("involuntary termination was mislabeled")
+}
+if (terminationLabel("Resignation (Voluntary)", "Regrettable") !== "Regrettable") {
+  throw new Error("regrettable resignation was mislabeled")
+}
+if (terminationLabel("Resignation (Voluntary)", "Non-Regrettable") !== "Non-Regrettable") {
+  throw new Error("non-regrettable resignation was mislabeled")
+}
+if (terminationLabel("Resignation (Voluntary)", null) !== "Voluntary Unspecified") {
+  throw new Error("unspecified resignation was mislabeled")
+}
+if (terminationLabel(null, null) !== "Unclassified") throw new Error("a blank termination was classified")
+const census = buildCensus(
+  {
+    months: [{ division: "Echelon", month: "2025-01", headcount: 53 }],
+    tenure: [
+      { division: "Echelon", label: "1-3 years", count: 11 },
+      { division: "Echelon", label: "< 6 months", count: 8 },
+      { division: "Improvizations", label: "6 months - 1 year", count: 3 },
+    ],
+    turnover: [
+      { division: "Echelon", termType: "Termination (Involuntary)", regrettable: null, count: 10 },
+      { division: "Echelon", termType: "Resignation (Voluntary)", regrettable: "Regrettable", count: 6 },
+      { division: "Echelon", termType: null, regrettable: null, count: 4 },
+      { division: "Echelon", termType: "Resignation (Voluntary)", regrettable: null, count: 2 },
+      { division: "Echelon", termType: "Resignation (Voluntary)", regrettable: "Non-Regrettable", count: 1 },
+    ],
+  },
+  "2026-10-29T21:00:00.000Z",
+  "live",
+)
+const echelonCensus = must(census.firms.find((firm) => firm.id === "echelon"), "echelon census")
+if (echelonCensus.months.length !== 12 || echelonCensus.months[0]?.headcount !== 53 || echelonCensus.months[1]?.headcount !== 0) {
+  throw new Error("missing months were not filled with zero")
+}
+if (echelonCensus.months.map((month) => month.label).join(",") !== "Jan,Feb,Mar,Apr,May,Jun,Jul,Aug,Sep,Oct,Nov,Dec") {
+  throw new Error("months left calendar order")
+}
+const shares = echelonCensus.termination.map((slice) => slice.share)
+if (shares.reduce((sum, share) => sum + share, 0) !== 100) throw new Error("termination shares do not add to 100")
+if (echelonCensus.termination.map((slice) => `${slice.label}:${slice.count}`).join("|") !== "Involuntary Termination:10|Voluntary Unspecified:2|Non-Regrettable:1|Regrettable:6|Unclassified:4") {
+  throw new Error("termination slices left deck order")
+}
+const improvCensus = must(census.firms.find((firm) => firm.id === "improv"), "improv census")
+if (improvCensus.termination.length !== 0 || improvCensus.tenure.length !== 1 || improvCensus.tenure[0]?.share !== 100) {
+  throw new Error("a firm without a turnover table still drew a termination pie")
+}
+if (parseHeadcountCensus(census) === null) throw new Error("a census did not round-trip")
+if (parseHeadcountCensus({ ...census, year: 2024 }) !== null) throw new Error("the wrong year was accepted")
+if (savedCensus.source !== "snapshot" || savedCensus.firms.length !== 6) {
+  throw new Error("the saved BambooHR extract is missing a firm")
+}
+for (const firm of savedCensus.firms) {
+  if (firm.months.length !== 12) throw new Error(`${firm.name} is missing a month`)
+  const termination = firm.termination.reduce((sum, slice) => sum + slice.share, 0)
+  const tenure = firm.tenure.reduce((sum, slice) => sum + slice.share, 0)
+  if (firm.termination.length > 0 && termination !== 100) throw new Error(`${firm.name} termination shares do not add to 100`)
+  if (firm.tenure.length > 0 && tenure !== 100) throw new Error(`${firm.name} tenure shares do not add to 100`)
+}
+const savedEchelon = must(savedCensus.firms.find((firm) => firm.id === "echelon"), "saved echelon")
+if (!savedEchelon.termination.some((slice) => slice.label === "Involuntary Termination" && slice.count > 0)) {
+  throw new Error("saved Echelon has no involuntary exits")
+}
+const markup = renderToStaticMarkup(CensusSection({ companyId: "all", census: sampleCensus() }))
+if (!markup.includes("Termination Type") || !markup.includes("Length of Service") || !markup.includes("Headcount by month")) {
+  throw new Error("the BambooHR section did not render its charts")
+}
+if (!markup.includes("Jan 40") || !markup.includes("Involuntary Termination 67%")) {
+  throw new Error("the BambooHR section hid its figures")
+}
+if (!renderToStaticMarkup(CensusSection({ companyId: "improv", census: sampleCensus() })).includes("Improv")) {
+  throw new Error("a single firm did not filter the BambooHR section")
+}
+if (renderToStaticMarkup(CensusSection({ companyId: "improv", census: sampleCensus() })).includes("Echelon Risk + Cyber")) {
+  throw new Error("a single firm still showed the rest of the portfolio")
+}
+
 console.log("ok")
+
+function sampleCensus(): HeadcountCensus {
+  const labels = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"] as const
+  const months = labels.map((label, index) => ({ label, headcount: index === 0 ? 40 : 1 }))
+  const firm = (id: string, name: string): HeadcountCensus["firms"][number] => ({
+    id,
+    name,
+    months,
+    termination: id === "echelon" ? [{ label: "Involuntary Termination", count: 2, share: 67 }] : [],
+    tenure: [{ label: "< 6 months", count: 1, share: 100 }],
+  })
+  return {
+    year: 2025,
+    asOf: "2026-10-29T21:00:00.000Z",
+    source: "live",
+    firms: [firm("echelon", "Echelon Risk + Cyber"), firm("improv", "Improv")],
+  }
+}
 
 function stripExpected(workspace: Workspace): Workspace {
   return {

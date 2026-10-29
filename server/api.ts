@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from "node:http"
 import path from "node:path"
 
+import { headcountCensus } from "./headcount-db"
 import { currentBoard, publishWorkspace, seedBoard } from "./snapshots"
 import { authenticate } from "./verify"
 import { loadEnvFile } from "./env"
@@ -24,6 +25,11 @@ export async function handleApi(req: IncomingMessage, res: ServerResponse): Prom
   try {
     if (req.method === "GET" && pathname === "/api/health") {
       return send(res, 200, { ok: true })
+    }
+    if (req.method === "GET" && pathname === "/api/headcount") {
+      const auth = await authenticate(req.headers.authorization)
+      if (!auth.ok) return send(res, auth.status, { message: auth.message })
+      return send(res, 200, await headcountCensus())
     }
     if (req.method === "GET" && pathname === "/api/workspace") {
       const auth = await authenticate(req.headers.authorization)

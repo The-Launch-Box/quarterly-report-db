@@ -3,6 +3,7 @@ import { useParams } from "react-router"
 import { BarChart3, Columns2, PanelTop, Plus, RotateCcw, Table2 } from "lucide-react"
 
 import { BoardChart } from "@/components/board-chart"
+import { LiveHeadcount } from "@/components/live-headcount"
 import { BoardTitle } from "@/components/board-title"
 import { BoardTable } from "@/components/board-table"
 import { CustomBoardScreen } from "@/components/custom-board"
@@ -178,6 +179,7 @@ function BoardScreen({ boardId }: { boardId: string }) {
         </>
       )}
       {view === "table" ? null : <BoardChart key={board.id} board={board} companyId={companyId} />}
+      {board.id === "headcount" ? <LiveHeadcount companyId={companyId} /> : null}
 
       <AddColumnDialog boardId={board.id} open={columnOpen} onClose={() => setColumnOpen(false)} />
       <AddTextEntryDialog boardId={board.id} firmWide open={textOpen} onClose={() => setTextOpen(false)} />
