@@ -32,7 +32,7 @@ function CreateBoardDialog({ open, onClose }: { open: boolean; onClose: () => vo
   const firm = listCompanies(workspace).find((company) => company.id === companyId)
   const description =
     companyId === "all"
-      ? "Choose a firm. The board is listed with a circle under YTD financial results, headcount, and revenue goals."
+      ? "Choose a firm. The board shows in the sidebar once that firm is open."
       : `Adds a board for ${firm?.name ?? "this firm"}. It is listed with a circle under the other boards.`
 
   return (
@@ -43,7 +43,7 @@ function CreateBoardDialog({ open, onClose }: { open: boolean; onClose: () => vo
 }
 
 function CreateBoardForm({ onDone }: { onDone: () => void }) {
-  const { workspace, companyId, dispatch } = useWorkspace()
+  const { workspace, companyId, dispatch, setCompanyId } = useWorkspace()
   const navigate = useNavigate()
   const companies = listCompanies(workspace)
   const [firmId, setFirmId] = useState(companyId === "all" ? (companies[0]?.id ?? "") : companyId)
@@ -70,6 +70,7 @@ function CreateBoardForm({ onDone }: { onDone: () => void }) {
         }
         const boardId = crypto.randomUUID()
         dispatch({ type: "add-board", boardId, firmId, title: next })
+        setCompanyId(firmId)
         onDone()
         navigate(`/${boardId}`)
       }}

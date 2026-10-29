@@ -30,7 +30,7 @@ export function Shell() {
     const boardId = pathname.split("/").filter(Boolean)[0]
     if (!boardId) return
     const board = workspace.boards.find((item) => item.id === boardId)
-    if (!board?.firmId || companyId === "all" || board.firmId === companyId) return
+    if (!board?.firmId || board.firmId === companyId) return
     navigate("/ytd")
   }, [pathname, workspace, companyId, navigate])
 
@@ -116,8 +116,7 @@ export function Shell() {
 
 function BoardNav({ layout }: { layout: "stack" | "wrap" }) {
   const { workspace, companyId } = useWorkspace()
-  const companies = listCompanies(workspace)
-  const custom = workspace.boards.filter((board) => board.firmId && (companyId === "all" || board.firmId === companyId))
+  const custom = workspace.boards.filter((board) => board.firmId === companyId)
 
   return (
     <nav
@@ -129,13 +128,7 @@ function BoardNav({ layout }: { layout: "stack" | "wrap" }) {
           <BoardLink key={item.to} {...item} />
         ))}
         {custom.map((board) => (
-          <BoardLink
-            key={board.id}
-            to={`/${board.id}`}
-            label={board.title}
-            circle
-            hint={companyId === "all" ? companies.find((company) => company.id === board.firmId)?.name : undefined}
-          />
+          <BoardLink key={board.id} to={`/${board.id}`} label={board.title} circle />
         ))}
       </div>
     </nav>
@@ -147,13 +140,11 @@ function BoardLink({
   label,
   icon: Icon,
   circle,
-  hint,
 }: {
   to: string
   label: string
   icon?: LucideIcon
   circle?: boolean
-  hint?: string
 }) {
   return (
     <NavLink
@@ -171,10 +162,7 @@ function BoardLink({
       ) : Icon ? (
         <Icon className="size-4 shrink-0" aria-hidden="true" />
       ) : null}
-      <span className="min-w-0">
-        <span className={cn("block", circle ? "max-w-44 truncate" : "whitespace-nowrap md:whitespace-normal")}>{label}</span>
-        {hint ? <span className="block truncate text-[10px] uppercase tracking-widest text-fg-faint">{hint}</span> : null}
-      </span>
+      <span className={cn("block min-w-0", circle ? "max-w-44 truncate" : "whitespace-nowrap md:whitespace-normal")}>{label}</span>
     </NavLink>
   )
 }
