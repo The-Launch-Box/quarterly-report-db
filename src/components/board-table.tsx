@@ -38,6 +38,12 @@ export function BoardTable({
     setFlash({ rowId, token: flashCount.current })
   }
 
+  function commitFirmMetric(groupId: string, rowId: string, columnId: string, value: string) {
+    dispatch({ type: "set-firm-metric", boardId: board.id, groupId, columnId, value })
+    flashCount.current += 1
+    setFlash({ rowId, token: flashCount.current })
+  }
+
   if (groups.length === 0) {
     return (
       <div className="rounded-lg border border-border bg-card px-4 py-8 text-sm text-muted-foreground">
@@ -61,10 +67,11 @@ export function BoardTable({
                   column.id === LABEL_COLUMN_ID && "left-0 z-30 min-w-56 border-r border-border-soft",
                   column.kind === "status" && "min-w-36",
                   isNumeric(column.kind) && "min-w-36 text-right",
+                  column.scope === "firm" && "min-w-32 max-w-36 whitespace-normal",
                   column.emphasis && "text-primary shadow-[inset_0_2px_0_var(--color-primary)]",
                 )}
               >
-                <div className={cn("flex items-center gap-1", isNumeric(column.kind) && "justify-end")}>
+                <div className={cn("flex items-center gap-1", isNumeric(column.kind) && "justify-end")} title={column.hint}>
                   <HeaderLabel
                     column={column}
                     onRename={
@@ -117,6 +124,7 @@ export function BoardTable({
                 })
               }
               onCommit={commitCell}
+              onCommitMetric={commitFirmMetric}
               onRename={(name) => dispatch({ type: "rename-company", groupId: group.id, name })}
               onAddRow={() => dispatch({ type: "add-row", boardId: board.id, groupId: group.id })}
               onDeleteRow={(rowId) => dispatch({ type: "delete-row", boardId: board.id, groupId: group.id, rowId })}
@@ -148,6 +156,7 @@ function GroupRows({
   flash,
   onToggle,
   onCommit,
+  onCommitMetric,
   onRename,
   onAddRow,
   onDeleteRow,
@@ -163,6 +172,7 @@ function GroupRows({
   flash: { rowId: string; token: number } | null
   onToggle: () => void
   onCommit: (groupId: string, rowId: string, columnId: string, value: string, previous: string) => void
+  onCommitMetric: (groupId: string, rowId: string, columnId: string, value: string) => void
   onRename: (name: string) => void
   onAddRow: () => void
   onDeleteRow: (rowId: string) => void
@@ -207,7 +217,8 @@ function GroupRows({
             return (
               <tr key={row.id} className="group">
                 {board.columns.map((column) => {
-                  const previous = row.cells[column.id] ?? ""
+                  const firm = column.scope === "firm"
+                  const previous = firm ? (group.metrics?.[column.id] ?? "") : (row.cells[column.id] ?? "")
                   return (
                     <td
                       key={column.id}
@@ -224,8 +235,12 @@ function GroupRows({
                         row={row}
                         raw={previous}
                         editable={canEdit}
-                        ariaLabel={`${column.name} for ${rowLabel} at ${groupName}`}
-                        onCommit={(value) => onCommit(groupId, row.id, column.id, value, previous)}
+                        ariaLabel={`${column.name} for ${firm ? groupName : `${rowLabel} at ${groupName}`}`}
+                        onCommit={(value) =>
+                          firm
+                            ? onCommitMetric(groupId, row.id, column.id, value)
+                            : onCommit(groupId, row.id, column.id, value, previous)
+                        }
                       />
                     </td>
                   )
@@ -286,8 +301,14 @@ function HeaderLabel({ column, onRename }: { column: Column; onRename?: (name: s
 
   if (!editing || !onRename) {
     const label = (
-      <span className={cn("truncate px-1", isNumeric(column.kind) && "text-right")}>
-        <span className="uppercase tracking-widest">{column.name}</span>
+      <span
+        className={cn(
+          "px-1",
+          column.scope === "firm" ? "whitespace-normal text-[10px] leading-tight tracking-wide normal-case" : "truncate",
+          isNumeric(column.kind) && "text-right",
+        )}
+      >
+        <span className={cn(column.scope === "firm" ? "normal-case" : "uppercase tracking-widest")}>{column.name}</span>
         {column.formula ? <span className="ml-2 text-[10px] tracking-widest text-fg-faint">Calc</span> : null}
       </span>
     )
@@ -295,7 +316,11 @@ function HeaderLabel({ column, onRename }: { column: Column; onRename?: (name: s
     return (
       <button
         type="button"
-        className={cn("truncate rounded px-1 text-left normal-case", isNumeric(column.kind) && "text-right")}
+        className={cn(
+          "rounded px-1 text-left normal-case",
+          column.scope === "firm" ? "whitespace-normal" : "truncate",
+          isNumeric(column.kind) && "text-right",
+        )}
         onClick={() => setEditing(true)}
       >
         {label}
@@ -392,7 +417,7 @@ function CellControl({
   }
   if (column.kind === "status") return <StatusCell raw={raw} ariaLabel={ariaLabel} onCommit={onCommit} />
   if (column.kind === "text") return <TextCell raw={raw} ariaLabel={ariaLabel} onCommit={onCommit} />
-  return <NumericCell kind={column.kind} raw={raw} ariaLabel={ariaLabel} onCommit={onCommit} />
+  return <NumericCell kind={column.kind} decimals={column.decimals} raw={raw} ariaLabel={ariaLabel} onCommit={onCommit} />
 }
 
 function ReadOnlyValue({
@@ -473,11 +498,13 @@ function TextCell({ raw, ariaLabel, onCommit }: { raw: string; ariaLabel: string
 
 function NumericCell({
   kind,
+  decimals,
   raw,
   ariaLabel,
   onCommit,
 }: {
   kind: ColumnKind
+  decimals?: number
   raw: string
   ariaLabel: string
   onCommit: (value: string) => void
@@ -489,7 +516,7 @@ function NumericCell({
     if (!focused) setDraft(raw)
   }, [raw, focused])
 
-  const display = raw ? formatRaw(kind, raw) : ""
+  const display = raw ? formatRaw(kind, raw, decimals) : ""
 
   return (
     <Input
@@ -498,7 +525,7 @@ function NumericCell({
       autoComplete="off"
       value={focused ? draft : display}
       onFocus={(event) => {
-        const next = kind === "percent" ? percentDraft(raw) : raw
+        const next = kind === "percent" ? percentDraft(raw, decimals ?? 1) : raw
         setDraft(next)
         setFocused(true)
         event.currentTarget.select()
@@ -511,7 +538,7 @@ function NumericCell({
           setDraft(raw)
           return
         }
-        commitNumeric(kind, draft, onCommit)
+        commitNumeric(kind, draft, onCommit, decimals)
       }}
       onKeyDown={(event) => {
         if (event.key === "Enter") event.currentTarget.blur()
@@ -552,30 +579,37 @@ function StatusCell({ raw, ariaLabel, onCommit }: { raw: string; ariaLabel: stri
   )
 }
 
-function commitNumeric(kind: ColumnKind, draft: string, onCommit: (value: string) => void) {
+function commitNumeric(kind: ColumnKind, draft: string, onCommit: (value: string) => void, decimals?: number) {
   if (!draft.trim()) {
     onCommit("")
     return
   }
   const parsed = kind === "percent" ? parsePercentInput(draft) : parseNumber(draft)
   if (parsed === null) return
-  if (kind === "percent") onCommit(String(parsed))
-  else onCommit(String(Math.round(parsed)))
+  if (kind === "percent") {
+    onCommit(String(parsed))
+    return
+  }
+  if (kind === "number" && decimals !== undefined) {
+    onCommit(String(Number(parsed.toFixed(decimals))))
+    return
+  }
+  onCommit(String(Math.round(parsed)))
 }
 
-function percentDraft(raw: string): string {
+function percentDraft(raw: string, digits: number): string {
   if (!raw.trim()) return ""
   const value = Number(raw)
   if (!Number.isFinite(value)) return raw
-  return String(Math.round(value * 1000) / 10)
+  return String(Number((value * 100).toFixed(digits)))
 }
 
-function formatRaw(kind: ColumnKind, raw: string): string {
+function formatRaw(kind: ColumnKind, raw: string, decimals?: number): string {
   const value = Number(raw)
   if (!Number.isFinite(value)) return raw
   if (kind === "currency") return formatCurrency(value)
-  if (kind === "percent") return formatPercent(value)
-  return formatNumber(value)
+  if (kind === "percent") return formatPercent(value, decimals ?? 1)
+  return formatNumber(value, decimals ?? 0)
 }
 
 function isNumeric(kind: ColumnKind): boolean {

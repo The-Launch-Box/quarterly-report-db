@@ -12,6 +12,7 @@ export type WorkspaceAction =
   | { type: "rename-company"; groupId: string; name: string }
   | { type: "delete-company"; groupId: string }
   | { type: "set-operating-results"; groupId: string; value: string }
+  | { type: "set-firm-metric"; boardId: string; groupId: string; columnId: string; value: string }
   | { type: "replace"; workspace: Workspace }
 
 export function reducer(workspace: Workspace, action: WorkspaceAction): Workspace {
@@ -19,7 +20,7 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
     case "set-cell":
       return mapBoard(workspace, action.boardId, (board) => {
         const column = board.columns.find((item) => item.id === action.columnId)
-        if (!column || column.formula) return board
+        if (!column || column.formula || column.scope === "firm") return board
         return {
           ...board,
           groups: board.groups.map((group) => {
@@ -115,6 +116,20 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
           group.id === action.groupId ? { ...group, operatingResults: action.value } : group,
         ),
       }))
+    case "set-firm-metric": {
+      const board = workspace.boards.find((item) => item.id === action.boardId)
+      const column = board?.columns.find((item) => item.id === action.columnId)
+      const group = board?.groups.find((item) => item.id === action.groupId)
+      if (!column || column.scope !== "firm" || !group) return workspace
+      if ((group.metrics?.[action.columnId] ?? "") === action.value) return workspace
+      return mapBoard(workspace, action.boardId, (current) => ({
+        ...current,
+        groups: current.groups.map((item) => {
+          if (item.id !== action.groupId) return item
+          return { ...item, metrics: { ...item.metrics, [action.columnId]: action.value } }
+        }),
+      }))
+    }
     case "replace":
       return action.workspace
     default: {
@@ -151,6 +166,7 @@ function deleteColumn(board: Board, columnId: string): Board {
     }),
     groups: board.groups.map((group) => ({
       ...group,
+      ...(group.metrics ? { metrics: withoutCell(group.metrics, columnId) } : {}),
       rows: group.rows.map((row) => ({ ...row, cells: withoutCell(row.cells, columnId) })),
     })),
   }

@@ -1,5 +1,5 @@
 import { formatCompactCurrency, formatCurrency, formatNumber, formatPercent } from "./format"
-import { LABEL_COLUMN_ID, type Board, type BoardRow, type Column, type Workspace } from "./types"
+import { LABEL_COLUMN_ID, type Board, type BoardGroup, type BoardRow, type Column, type Workspace } from "./types"
 
 export interface KpiResult {
   id: string
@@ -17,6 +17,7 @@ export interface PlotRow {
 }
 
 export function isValueColumn(column: Column): boolean {
+  if (column.scope === "firm") return false
   return column.kind === "number" || column.kind === "currency" || column.kind === "percent"
 }
 
@@ -115,8 +116,8 @@ export function aggregateColumn(column: Column, rows: BoardRow[], columns: Colum
 export function formatColumnValue(column: Column, value: number | null): string {
   if (value === null) return ""
   if (column.kind === "currency") return formatCurrency(value)
-  if (column.kind === "percent") return formatPercent(value)
-  if (column.kind === "number") return formatNumber(value)
+  if (column.kind === "percent") return formatPercent(value, column.decimals ?? 1)
+  if (column.kind === "number") return formatNumber(value, column.decimals ?? 0)
   return String(value)
 }
 
@@ -218,6 +219,47 @@ export function defaultScatterColumnIds(board: Board): [string, string] {
   return [columns[0]?.id ?? "", columns[1]?.id ?? columns[0]?.id ?? ""]
 }
 
+export interface ProfitMarginPoint {
+  key: string
+  label: string
+  gross: number | null
+  net: number | null
+}
+
+export interface ProfitMarginChart {
+  netLabel: string
+  points: ProfitMarginPoint[]
+}
+
+const MARGIN_PERIODS = [
+  { id: "q1", label: "Q1" },
+  { id: "q2", label: "Q2" },
+  { id: "q3", label: "Q3" },
+  { id: "q4", label: "Q4" },
+] as const
+
+/** Gross margin and profit margin. One firm is plotted by quarter. All companies uses each firm's year-to-date margin. */
+export function profitMarginChart(board: Board, companyId: string): ProfitMarginChart | null {
+  if (board.id !== "ytd") return null
+  const groups = companyId === "all" ? board.groups : board.groups.filter((group) => group.id === companyId)
+  if (groups.length === 0) return null
+  if (!groups.some((group) => rowByLabel(group, "Revenue") && rowByLabel(group, "Gross profit"))) return null
+
+  if (companyId === "all") {
+    return {
+      netLabel: netSeriesLabel(groups),
+      points: groups.map((group) => marginPoint(group, board.columns, "ytd", group.name)),
+    }
+  }
+
+  const group = groups[0]
+  if (!group) return null
+  return {
+    netLabel: netSeriesLabel([group]),
+    points: MARGIN_PERIODS.map((period) => marginPoint(group, board.columns, period.id, period.label)),
+  }
+}
+
 export function defaultLineFilter(board: Board): string {
   if (board.aggregateRows) return ""
   const labels = uniqueLabels(board)
@@ -246,6 +288,40 @@ function visibleRows(board: Board, companyId: string): BoardRow[] {
 function filterLabel(rows: BoardRow[], labelEquals: string | undefined): BoardRow[] {
   if (!labelEquals) return rows
   return rows.filter((row) => labelsMatch(row, labelEquals))
+}
+
+function marginPoint(group: BoardGroup, columns: Column[], columnId: string, label: string): ProfitMarginPoint {
+  const revenue = labeledValue(group, columns, columnId, "Revenue")
+  const profitLine = rowByLabel(group, "Net income") ? "Net income" : "EBITDA"
+  return {
+    key: `${group.id}-${columnId}`,
+    label,
+    gross: marginRatio(labeledValue(group, columns, columnId, "Gross profit"), revenue),
+    net: marginRatio(labeledValue(group, columns, columnId, profitLine), revenue),
+  }
+}
+
+function netSeriesLabel(groups: BoardGroup[]): string {
+  const sources = new Set(groups.map((group) => (rowByLabel(group, "Net income") ? "net" : "ebitda")))
+  if (sources.size === 1 && sources.has("net")) return "Net margin"
+  if (sources.size === 1 && sources.has("ebitda")) return "EBITDA margin"
+  return "Profit margin"
+}
+
+function labeledValue(group: BoardGroup, columns: Column[], columnId: string, label: string): number | null {
+  const row = rowByLabel(group, label)
+  const column = columns.find((item) => item.id === columnId)
+  if (!row || !column) return null
+  return cellNumber(column, row, columns)
+}
+
+function marginRatio(numerator: number | null, denominator: number | null): number | null {
+  if (numerator === null || denominator === null || denominator === 0) return null
+  return numerator / denominator
+}
+
+function rowByLabel(group: BoardGroup, label: string): BoardRow | undefined {
+  return group.rows.find((row) => labelsMatch(row, label))
 }
 
 function labelsMatch(row: BoardRow, label: string): boolean {

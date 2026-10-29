@@ -29,8 +29,11 @@ export function parsePercentInput(raw: string): number | null {
   return value
 }
 
-export function formatNumber(value: number): string {
-  const body = new Intl.NumberFormat("en-US", { maximumFractionDigits: 0 }).format(Math.abs(value))
+export function formatNumber(value: number, digits = 0): string {
+  const body = new Intl.NumberFormat("en-US", {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(Math.abs(value))
   return value < 0 ? `−${body}` : body
 }
 
@@ -51,10 +54,10 @@ export function formatCompactCurrency(value: number): string {
   return formatCurrency(value)
 }
 
-export function formatPercent(value: number): string {
+export function formatPercent(value: number, digits = 1): string {
   const points = value * 100
   const sign = points < 0 ? "−" : ""
-  return `${sign}${Math.abs(points).toFixed(1)}%`
+  return `${sign}${Math.abs(points).toFixed(digits)}%`
 }
 
 export function shortName(name: string): string {

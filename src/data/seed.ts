@@ -131,6 +131,75 @@ const PORTCOS: readonly PortcoSeed[] = [
   },
 ]
 
+/** YTD ratios from the operating-results slide. Improv uses that slide. Other firms are starter figures. */
+const FIRM_RATIO_COLUMNS: Column[] = [
+  {
+    id: "gpm",
+    name: "Gross profit margin",
+    kind: "percent",
+    scope: "firm",
+    decimals: 0,
+    hint: "Gross profit / revenue",
+  },
+  {
+    id: "nbtem",
+    name: "Non-billable travel expense margin",
+    kind: "percent",
+    scope: "firm",
+    decimals: 0,
+    hint: "Non-billable expenses / revenue",
+  },
+  {
+    id: "sga",
+    name: "SG&A expense ratio",
+    kind: "percent",
+    scope: "firm",
+    decimals: 0,
+    hint: "SG&A expenses / revenue",
+  },
+  {
+    id: "npm",
+    name: "Net profit margin",
+    kind: "percent",
+    scope: "firm",
+    decimals: 0,
+    hint: "Net income / revenue",
+  },
+  {
+    id: "rgr",
+    name: "Revenue growth rate",
+    kind: "percent",
+    scope: "firm",
+    decimals: 0,
+    hint: "Revenue growth versus the prior period",
+  },
+  {
+    id: "wkr",
+    name: "Working capital ratio",
+    kind: "number",
+    scope: "firm",
+    decimals: 2,
+    hint: "Current assets / current liabilities",
+  },
+]
+
+const IMPROV_FIRM_RATIOS: Record<string, string> = {
+  gpm: "0.38",
+  nbtem: "0.01",
+  sga: "0.31",
+  npm: "0.06",
+  rgr: "0.61",
+  wkr: "0.75",
+}
+
+const FIRM_RATIO_EXTRAS: Record<string, Record<string, string>> = {
+  echelon: { nbtem: "0.02", sga: "0.22", npm: "0.12", rgr: "0.18", wkr: "1.62" },
+  hyperscayle: { nbtem: "0.01", sga: "0.18", npm: "0.19", rgr: "0.27", wkr: "2.05" },
+  vescape: { nbtem: "0.03", sga: "0.28", npm: "0.04", rgr: "0.06", wkr: "1.12" },
+  bluetrail: { nbtem: "0.02", sga: "0.24", npm: "0.09", rgr: "0.14", wkr: "1.44" },
+  dxfoundation: { nbtem: "0.04", sga: "0.27", npm: "0.03", rgr: "0.21", wkr: "0.88" },
+}
+
 const YTD_COLUMNS: Column[] = [
   { id: LABEL_COLUMN_ID, name: "Line", kind: "text" },
   { id: EXPECTED_COLUMN_ID, name: "Expected", kind: "currency" },
@@ -145,6 +214,7 @@ const YTD_COLUMNS: Column[] = [
     formula: { op: "sum", columnIds: ["q1", "q2", "q3", "q4"] },
   },
   { id: "status", name: "Status", kind: "status" },
+  ...FIRM_RATIO_COLUMNS,
 ]
 
 const HEADCOUNT_COLUMNS: Column[] = [
@@ -199,6 +269,60 @@ export function withImprovDeck(workspace: Workspace): Workspace {
   return changed ? { ...workspace, boards } : workspace
 }
 
+/** Adds the YTD ratio columns to a saved board that predates them. */
+export function withFirmRatios(workspace: Workspace): Workspace {
+  let changed = false
+  const boards = workspace.boards.map((board) => {
+    if (board.id !== "ytd") return board
+    const next = placeFirmRatios(board)
+    if (next !== board) changed = true
+    return next
+  })
+  return changed ? { ...workspace, boards } : workspace
+}
+
+function placeFirmRatios(board: Board): Board {
+  const columns = board.firmRatios ? board.columns : insertFirmRatioColumns(board.columns)
+  const groups = board.groups.map((group) => fillFirmMetrics(group, columns))
+  const groupsSame = groups.every((group, index) => group === board.groups[index])
+  if (columns === board.columns && groupsSame && board.firmRatios) return board
+  return { ...board, firmRatios: true, columns, groups }
+}
+
+function insertFirmRatioColumns(columns: Column[]): Column[] {
+  if (columns.some((column) => column.scope === "firm" || FIRM_RATIO_COLUMNS.some((item) => item.id === column.id))) {
+    return columns
+  }
+  const ratios = FIRM_RATIO_COLUMNS.map((column) => ({ ...column }))
+  const statusIndex = columns.findIndex((column) => column.id === "status")
+  const at = statusIndex >= 0 ? statusIndex + 1 : columns.length
+  const next = columns.slice()
+  next.splice(at, 0, ...ratios)
+  return next
+}
+
+function fillFirmMetrics(group: BoardGroup, columns: Column[]): BoardGroup {
+  const defaults = firmMetricsFor(group.id)
+  if (!defaults) return group
+  const wanted = columns.filter((column) => column.scope === "firm").map((column) => column.id)
+  const missing = wanted.filter((id) => defaults[id] !== undefined && group.metrics?.[id] === undefined)
+  if (missing.length === 0) return group
+  const metrics = { ...group.metrics }
+  for (const id of missing) {
+    const value = defaults[id]
+    if (value !== undefined) metrics[id] = value
+  }
+  return { ...group, metrics }
+}
+
+function firmMetricsFor(id: string): Record<string, string> | null {
+  if (id === "improv") return IMPROV_FIRM_RATIOS
+  const portco = PORTCOS.find((item) => item.id === id)
+  const extra = FIRM_RATIO_EXTRAS[id]
+  if (!portco || !extra) return null
+  return { gpm: String(portco.gp), ...extra }
+}
+
 export function createSeedWorkspace(): Workspace {
   return {
     version: 1,
@@ -206,8 +330,9 @@ export function createSeedWorkspace(): Workspace {
       {
         id: "ytd",
         title: "YTD financial results",
-        subtitle: "Expected sits beside Q1. Closed actuals run Q1 to Q3. Q4 forecast is the working column. YTD is calculated.",
+        subtitle: "Firm ratios sit to the right of status.",
         aggregateRows: false,
+        firmRatios: true,
         columns: YTD_COLUMNS,
         groups: PORTCOS.map((portco) => (portco.id === "improv" ? improvYtdGroup() : ytdGroup(portco))),
         kpis: [
@@ -253,6 +378,11 @@ export function seedProblems(): string[] {
   const revenue = workspace.boards.find((board) => board.id === "revenue")
   if (!ytd || !revenue) return ["Missing seed boards."]
   const problems: string[] = []
+  const statusIndex = ytd.columns.findIndex((column) => column.id === "status")
+  FIRM_RATIO_COLUMNS.forEach((column, offset) => {
+    const placed = ytd.columns[statusIndex + 1 + offset]
+    if (!placed || placed.id !== column.id) problems.push(`${column.name} is not to the right of status.`)
+  })
   for (const group of ytd.groups) {
     const rev = group.rows.find((row) => row.cells[LABEL_COLUMN_ID] === "Revenue")
     const motions = revenue.groups.find((item) => item.id === group.id)
@@ -264,6 +394,7 @@ export function seedProblems(): string[] {
       problems.push(...improvSeedProblems(group, motions))
       continue
     }
+    problems.push(...firmRatioProblems(group))
     for (const quarter of ["q3", "q4"] as const) {
       const total = Number(rev.cells[quarter])
       const sum = motions.rows.reduce((acc, row) => acc + Number(row.cells[quarter] ?? 0), 0)
@@ -360,6 +491,7 @@ function improvYtdGroup(): BoardGroup {
     id: "improv",
     name: "Improv",
     operatingResults: IMPROV_OPERATING_RESULTS,
+    metrics: firmMetricsFor("improv") ?? undefined,
     rows: [
       closedMoneyRow("improv-revenue", "Revenue", revenue, IMPROV_REVENUE_EXPECTED),
       closedMoneyRow("improv-gp", "Gross profit", gross, IMPROV_GROSS_EXPECTED),
@@ -420,10 +552,23 @@ function improvSeedProblems(ytd: BoardGroup, revenue: BoardGroup): string[] {
     if (gap !== Number(opex.cells[quarter])) problems.push(`Improv ${quarter} does not foot.`)
   }
   if (ytd.operatingResults !== IMPROV_OPERATING_RESULTS) problems.push("Improv operating results are missing.")
+  problems.push(...firmRatioProblems(ytd))
   const plan = new Map(IMPROV_PLAN)
   for (const [label, amount] of plan) {
     const row = revenue.rows.find((item) => item.cells[LABEL_COLUMN_ID] === label)
     if (!row || row.cells[EXPECTED_COLUMN_ID] !== String(amount)) problems.push(`Improv plan is missing ${label}.`)
+  }
+  return problems
+}
+
+function firmRatioProblems(group: BoardGroup): string[] {
+  const expected = firmMetricsFor(group.id)
+  if (!expected) return [`Missing firm ratios for ${group.id}.`]
+  const problems: string[] = []
+  for (const column of FIRM_RATIO_COLUMNS) {
+    if (group.metrics?.[column.id] !== expected[column.id]) {
+      problems.push(`${group.id} ${column.id} is ${group.metrics?.[column.id] ?? "missing"}.`)
+    }
   }
   return problems
 }
@@ -487,6 +632,7 @@ function ytdGroup(portco: PortcoSeed): BoardGroup {
   return {
     id: portco.id,
     name: portco.name,
+    metrics: firmMetricsFor(portco.id) ?? undefined,
     rows: [
       moneyRow(`${portco.id}-revenue`, "Revenue", quarters, annualPlan(quarters, portco.goalLift)),
       moneyRow(`${portco.id}-gp`, "Gross profit", gross, annualPlan(gross, portco.goalLift)),

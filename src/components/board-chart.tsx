@@ -1,11 +1,13 @@
 import { useState } from "react"
-import { BarChart3, PieChart as PieIcon, ScatterChart as ScatterIcon } from "lucide-react"
+import { BarChart3, LineChart as LineChartIcon, PieChart as PieIcon, ScatterChart as ScatterIcon } from "lucide-react"
 import {
   Bar,
   BarChart,
   CartesianGrid,
   Cell,
   Legend,
+  Line,
+  LineChart,
   Pie,
   PieChart,
   ResponsiveContainer,
@@ -25,6 +27,7 @@ import {
   defaultScatterColumnIds,
   formatColumnValue,
   plotRows,
+  profitMarginChart,
   uniqueLabels,
   valueColumns,
   type PlotRow,
@@ -41,11 +44,12 @@ const SERIES_COLORS = [
   "var(--color-chart-3)",
 ] as const
 
-type ChartType = "bar" | "pie" | "scatter"
+type ChartType = "bar" | "pie" | "scatter" | "margins"
 type Grain = "company" | "line"
 
 export function BoardChart({ board, companyId }: { board: Board; companyId: string }) {
-  const columns = valueColumns(board)
+  const columns = valueColumns(board).filter((column) => column.scope !== "firm")
+  const marginsAvailable = board.id === "ytd"
   const [chartType, setChartType] = useState<ChartType>("bar")
   const [grain, setGrain] = useState<Grain>("company")
   const [lineFilter, setLineFilter] = useState(() => defaultLineFilter(board))
@@ -79,8 +83,8 @@ export function BoardChart({ board, companyId }: { board: Board; companyId: stri
 
   return (
     <section className="rounded-lg border border-border bg-card px-5 py-5" aria-label="Graph">
-      <h2 className="text-xl">{chartType === "bar" ? "Bar" : chartType === "pie" ? "Pie" : "Scatterplot"}</h2>
-      <p className="mt-1 text-sm text-muted-foreground">{chartDescription(chartType, grain, board.aggregateRows, activeLine)}</p>
+      <h2 className="text-xl">{chartTitle(chartType)}</h2>
+      <p className="mt-1 text-sm text-muted-foreground">{chartDescription(chartType, grain, board.aggregateRows, activeLine, companyId)}</p>
       <div className="mt-4 flex flex-wrap items-end gap-4">
         <Segmented
           label="Graph type"
@@ -90,8 +94,10 @@ export function BoardChart({ board, companyId }: { board: Board; companyId: stri
             { value: "bar", label: "Bar", icon: BarChart3 },
             { value: "pie", label: "Pie", icon: PieIcon },
             { value: "scatter", label: "Scatterplot", icon: ScatterIcon },
+            ...(marginsAvailable ? [{ value: "margins" as const, label: "Profit margins", icon: LineChartIcon }] : []),
           ]}
         />
+        {chartType === "margins" ? null : (
         <Field label="Rows" htmlFor="chart-grain">
           <Select
             id="chart-grain"
@@ -104,7 +110,8 @@ export function BoardChart({ board, companyId }: { board: Board; companyId: stri
             className="w-40"
           />
         </Field>
-        {lineRequired || grain === "line" ? (
+        )}
+        {chartType === "margins" ? null : lineRequired || grain === "line" ? (
           <Field label="Line" htmlFor="chart-line">
             <Select
               id="chart-line"
@@ -158,6 +165,8 @@ export function BoardChart({ board, companyId }: { board: Board; companyId: stri
           <BarView companyId={companyId} plots={plots} columns={columns} barIds={barIds} />
         ) : chartType === "pie" ? (
           <PieView companyId={companyId} plots={plots} column={columns.find((column) => column.id === activePie)} />
+        ) : chartType === "margins" ? (
+          <MarginView board={board} companyId={companyId} />
         ) : (
           <ScatterView
             companyId={companyId}
@@ -167,7 +176,9 @@ export function BoardChart({ board, companyId }: { board: Board; companyId: stri
           />
         )}
       </div>
-      {hidden > 0 ? <p className="mt-2 text-xs text-muted-foreground">Showing 40 marks. {hidden} more are hidden.</p> : null}
+      {chartType !== "margins" && hidden > 0 ? (
+        <p className="mt-2 text-xs text-muted-foreground">Showing 40 marks. {hidden} more are hidden.</p>
+      ) : null}
     </section>
   )
 }
@@ -266,6 +277,67 @@ function PieView({ companyId, plots, column }: { companyId: string; plots: PlotR
   )
 }
 
+function MarginView({ board, companyId }: { board: Board; companyId: string }) {
+  const chart = profitMarginChart(board, companyId)
+  if (!chart || chart.points.every((point) => point.gross === null && point.net === null)) {
+    return <EmptyPlot message="Profit margins need revenue and gross profit." />
+  }
+  const portco = companyId === "all" ? null : portcoId(companyId)
+  const grossColor = portco ? BRAND_SERIES[portco][0] : "var(--color-tlb-info)"
+  const netColor = portco ? (BRAND_SERIES[portco][1] ?? BRAND_MARK[portco]) : "var(--color-primary)"
+  const tilt = chart.points.some((point) => point.label.length > 12)
+  const columns: Column[] = [
+    { id: "gross", name: "Gross margin", kind: "percent" },
+    { id: "net", name: chart.netLabel, kind: "percent" },
+  ]
+
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <LineChart data={chart.points} margin={{ top: 8, right: 16, left: 8, bottom: 8 }}>
+        <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
+        <XAxis
+          dataKey="label"
+          interval={0}
+          angle={tilt ? -28 : 0}
+          textAnchor={tilt ? "end" : "middle"}
+          height={tilt ? 72 : 32}
+          tickFormatter={(value: string | number) => shortName(String(value))}
+          stroke="var(--color-muted-foreground)"
+          tick={{ fill: "var(--color-muted-foreground)", fontSize: 11 }}
+        />
+        <YAxis
+          width={56}
+          stroke="var(--color-muted-foreground)"
+          tick={{ fill: "var(--color-muted-foreground)", fontSize: 11 }}
+          tickFormatter={(value: number) => axisTick("percent", value)}
+        />
+        <Tooltip content={<SeriesTooltip columns={columns} />} />
+        <Legend formatter={(value) => <span className="text-xs text-muted-foreground">{String(value)}</span>} />
+        <Line
+          type="monotone"
+          dataKey="gross"
+          name="Gross margin"
+          stroke={grossColor}
+          strokeWidth={2}
+          dot={{ r: 3 }}
+          connectNulls={false}
+          animationDuration={180}
+        />
+        <Line
+          type="monotone"
+          dataKey="net"
+          name={chart.netLabel}
+          stroke={netColor}
+          strokeWidth={2}
+          dot={{ r: 3 }}
+          connectNulls={false}
+          animationDuration={180}
+        />
+      </LineChart>
+    </ResponsiveContainer>
+  )
+}
+
 function ScatterView({
   companyId,
   plots,
@@ -340,6 +412,7 @@ function SeriesTooltip({
         const key = String(item.dataKey ?? index)
         const column = columns.find((entry) => entry.id === key) ?? valueColumn
         const numeric = typeof item.value === "number" ? item.value : Number(item.value)
+        if (!Number.isFinite(numeric)) return null
         return (
           <div key={`${key}-${index}`} className="text-xs text-muted-foreground">
             {item.name ? `${item.name}: ` : null}
@@ -422,7 +495,19 @@ function axisTick(kind: ColumnKind, value: number): string {
   return formatNumber(value)
 }
 
-function chartDescription(chartType: ChartType, grain: Grain, aggregateRows: boolean, line: string): string {
+function chartTitle(chartType: ChartType): string {
+  if (chartType === "bar") return "Bar"
+  if (chartType === "pie") return "Pie"
+  if (chartType === "margins") return "Profit margins"
+  return "Scatterplot"
+}
+
+function chartDescription(chartType: ChartType, grain: Grain, aggregateRows: boolean, line: string, companyId: string): string {
+  if (chartType === "margins") {
+    return companyId === "all"
+      ? "Year-to-date gross margin and profit margin for each firm."
+      : "Gross margin and profit margin for each quarter."
+  }
   if (chartType === "pie") return "Share of the selected column. Zero and negative values are omitted."
   if (grain === "company" && aggregateRows) return "Each mark is a company total. The graph updates when a cell commits."
   if (grain === "company") return `Each mark is ${line || "the selected line"} by company. The graph updates when a cell commits.`

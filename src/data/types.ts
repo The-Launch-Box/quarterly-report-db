@@ -36,6 +36,12 @@ export interface Column {
   emphasis?: boolean
   /** Skip multi-row totals. Used for rates, which do not add across roles. */
   rollup?: "skip"
+  /** One reported figure for the firm. Every line in that firm shows the same value. */
+  scope?: "firm"
+  /** Digits after the decimal. For percents, digits in the percent, not the stored ratio. */
+  decimals?: number
+  /** Shown on the column header. */
+  hint?: string
 }
 
 export interface BoardRow {
@@ -51,6 +57,8 @@ export interface BoardGroup {
   rows: BoardRow[]
   /** Improv commentary on the YTD board. Editable plaintext. */
   operatingResults?: string
+  /** Firm-level ratios, keyed by column id. Shared by every line in the firm. */
+  metrics?: Record<string, string>
 }
 
 export interface KpiDef {
@@ -73,6 +81,8 @@ export interface Board {
   columns: Column[]
   groups: BoardGroup[]
   kpis: KpiDef[]
+  /** YTD firm-ratio columns were added. A later delete of one of those columns stays deleted. */
+  firmRatios?: boolean
 }
 
 export interface Workspace {

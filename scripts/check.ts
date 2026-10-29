@@ -6,10 +6,10 @@ import { isAdminEmail, isLaunchboxEmail, launchboxEmailFromClaims } from "../src
 import { formatCurrency, parseNumber, parsePercentInput } from "../src/data/format"
 import { isExpired, SNAPSHOT_TTL_MS } from "../src/data/retention"
 import { publishWorkspace, readLiveSnapshot, saveSnapshot } from "../server/snapshots"
-import { aggregateColumn, cellNumber, computeKpis } from "../src/data/metrics"
+import { aggregateColumn, cellNumber, computeKpis, defaultBarColumnIds, formatColumnValue, profitMarginChart } from "../src/data/metrics"
 import { parseWorkspace } from "../src/data/persist"
 import { reducer } from "../src/data/reducer"
-import { createSeedWorkspace, IMPROV_OPERATING_RESULTS, seedProblems, varianceStatus, withExpectedColumn, withImprovDeck } from "../src/data/seed"
+import { createSeedWorkspace, IMPROV_OPERATING_RESULTS, seedProblems, varianceStatus, withExpectedColumn, withFirmRatios, withImprovDeck } from "../src/data/seed"
 import { EXPECTED_COLUMN_ID, LABEL_COLUMN_ID, type Board, type Workspace } from "../src/data/types"
 
 function must<T>(value: T | undefined | null, message: string): T {
@@ -164,6 +164,116 @@ const improvNet = must(
 if (cellNumber(ytdColumn, improvNet, ytd.columns) !== 198_000) throw new Error("improv net income YTD should be $198k")
 if (improvGroup.operatingResults !== IMPROV_OPERATING_RESULTS) throw new Error("improv operating results missing")
 
+const firmRatioIds = ["gpm", "nbtem", "sga", "npm", "rgr", "wkr"] as const
+const statusIndex = ytd.columns.findIndex((column) => column.id === "status")
+for (const [offset, id] of firmRatioIds.entries()) {
+  const column = ytd.columns[statusIndex + 1 + offset]
+  if (!column || column.id !== id || column.scope !== "firm") throw new Error(`${id} should sit to the right of status`)
+}
+if (headcount.columns.some((column) => column.scope === "firm")) throw new Error("headcount should not carry firm ratios")
+if (defaultBarColumnIds(ytd).join() !== "q3,q4") throw new Error("firm ratios should stay off the default chart")
+if (ytd.subtitle.includes("Expected sits beside Q1")) throw new Error("the YTD column note should be gone")
+const echelonMargins = must(profitMarginChart(ytd, "echelon"), "echelon margins")
+const echelonQ3 = must(echelonMargins.points.find((point) => point.key.endsWith("-q3")), "echelon q3 margin")
+if (echelonQ3.gross === null || Math.abs(echelonQ3.gross - 0.58) > 0.0001) throw new Error("echelon gross margin")
+if (echelonQ3.net === null || Math.abs(echelonQ3.net - 0.17) > 0.0001) throw new Error("echelon profit margin")
+if (echelonMargins.netLabel !== "EBITDA margin") throw new Error("echelon uses EBITDA for the profit line")
+const improvMargins = must(profitMarginChart(ytd, "improv"), "improv margins")
+if (improvMargins.netLabel !== "Net margin") throw new Error("improv uses net income for the profit line")
+const improvQ1 = must(improvMargins.points.find((point) => point.label === "Q1"), "improv q1 margin")
+if (improvQ1.gross === null || Math.abs(improvQ1.gross - 433_333 / 1_133_333) > 0.0001) throw new Error("improv gross margin")
+const allMargins = must(profitMarginChart(ytd, "all"), "all margins")
+if (allMargins.points.length !== ytd.groups.length) throw new Error("profit margins should include every firm")
+if (allMargins.netLabel !== "Profit margin") throw new Error("mixed profit lines need one series name")
+const grossMargin = must(ytd.columns.find((column) => column.id === "gpm"), "gross margin column")
+if (formatColumnValue(grossMargin, 0.38) !== "38%") throw new Error("gross margin should display as a whole percent")
+const workingCapital = must(ytd.columns.find((column) => column.id === "wkr"), "working capital column")
+if (workingCapital.decimals !== 2 || formatColumnValue(workingCapital, 0.75) !== "0.75") {
+  throw new Error("working capital should keep hundredths")
+}
+if (formatColumnValue(workingCapital, 1.5) !== "1.50") throw new Error("working capital should show two digits")
+const improvRatios = { gpm: "0.38", nbtem: "0.01", sga: "0.31", npm: "0.06", rgr: "0.61", wkr: "0.75" }
+for (const [id, value] of Object.entries(improvRatios)) {
+  if (improvGroup.metrics?.[id] !== value) throw new Error(`improv ${id} should be the deck YTD figure`)
+}
+if (improvRevenue.cells.gpm) throw new Error("a firm ratio should not be stored on a line")
+const echelonMetrics = must(echelon.metrics, "echelon ratios")
+if (echelonMetrics.gpm !== "0.58" || echelonMetrics.wkr !== "1.62") throw new Error("echelon starter ratios")
+if (!ytd.groups.every((group) => firmRatioIds.every((id) => group.metrics?.[id]))) {
+  throw new Error("every firm should have the six ratios")
+}
+
+const rated = reducer(seed, { type: "set-firm-metric", boardId: "ytd", groupId: "improv", columnId: "wkr", value: "1.1" })
+const ratedGroup = must(
+  rated.boards.find((board) => board.id === "ytd")?.groups.find((group) => group.id === "improv"),
+  "rated improv",
+)
+if (ratedGroup.metrics?.wkr !== "1.1") throw new Error("working capital edit did not save")
+if (ratedGroup.rows.some((row) => row.cells.wkr)) throw new Error("working capital edit landed on a line")
+if (reducer(rated, { type: "set-firm-metric", boardId: "ytd", groupId: "improv", columnId: "wkr", value: "1.1" }) !== rated) {
+  throw new Error("an unchanged firm ratio should keep the workspace")
+}
+const blockedRatio = reducer(seed, {
+  type: "set-cell",
+  boardId: "ytd",
+  groupId: "improv",
+  rowId: improvRevenue.id,
+  columnId: "gpm",
+  value: "0.5",
+})
+const blockedRatioRow = must(
+  blockedRatio.boards
+    .find((board) => board.id === "ytd")
+    ?.groups.find((group) => group.id === "improv")
+    ?.rows.find((row) => row.id === improvRevenue.id),
+  "blocked ratio row",
+)
+if (blockedRatioRow.cells.gpm) throw new Error("firm ratio was written onto a line")
+if (
+  blockedRatio.boards.find((board) => board.id === "ytd")?.groups.find((group) => group.id === "improv")?.metrics?.gpm !==
+  "0.38"
+) {
+  throw new Error("a line edit changed the firm gross margin")
+}
+
+if (withFirmRatios(seed) !== seed) throw new Error("current firm ratios were rewritten")
+const strippedRatios = structuredClone(seed)
+const strippedYtd = must(strippedRatios.boards.find((board) => board.id === "ytd"), "stripped ytd")
+delete strippedYtd.firmRatios
+strippedYtd.columns = strippedYtd.columns.filter((column) => column.scope !== "firm")
+for (const group of strippedYtd.groups) delete group.metrics
+const restoredRatios = withFirmRatios(strippedRatios)
+const restoredYtd = must(restoredRatios.boards.find((board) => board.id === "ytd"), "restored ytd")
+if (!restoredYtd.firmRatios) throw new Error("restored board did not remember the ratio columns")
+for (const [offset, id] of firmRatioIds.entries()) {
+  if (restoredYtd.columns[statusIndex + 1 + offset]?.id !== id) throw new Error("restored ratios left status")
+}
+const restoredImprov = must(restoredYtd.groups.find((group) => group.id === "improv"), "restored improv")
+if (restoredImprov.metrics?.npm !== "0.06" || restoredImprov.metrics.wkr !== "0.75") {
+  throw new Error("restored improv ratios")
+}
+if (withFirmRatios(restoredRatios) !== restoredRatios) throw new Error("restored ratios were rewritten")
+
+const customRatios = structuredClone(seed)
+const customYtd = must(customRatios.boards.find((board) => board.id === "ytd"), "custom ytd")
+delete customYtd.firmRatios
+customYtd.columns = customYtd.columns.filter((column) => column.scope !== "firm")
+const customImprov = must(customYtd.groups.find((group) => group.id === "improv"), "custom improv")
+customImprov.metrics = { gpm: "0.41", nbtem: "" }
+const keptRatios = withFirmRatios(customRatios)
+const keptImprov = must(
+  keptRatios.boards.find((board) => board.id === "ytd")?.groups.find((group) => group.id === "improv"),
+  "kept improv",
+)
+if (keptImprov.metrics?.gpm !== "0.41" || keptImprov.metrics.nbtem !== "" || keptImprov.metrics.wkr !== "0.75") {
+  throw new Error("saved firm ratios were overwritten")
+}
+const droppedRatio = reducer(seed, { type: "delete-column", boardId: "ytd", columnId: "gpm" })
+const droppedBoard = must(droppedRatio.boards.find((board) => board.id === "ytd"), "dropped ytd")
+if (droppedBoard.columns.some((column) => column.id === "gpm")) throw new Error("gross margin column remained")
+if (droppedBoard.groups.some((group) => group.metrics?.gpm)) throw new Error("gross margin value remained")
+if (withFirmRatios(droppedRatio) !== droppedRatio) throw new Error("a deleted firm ratio was put back")
+
 const improvHeads = computeKpis(headcount, "improv").find((kpi) => kpi.id === "q3-heads")
 if (!improvHeads || improvHeads.value !== "32") throw new Error(`improv headcount ${improvHeads?.value ?? "missing"}`)
 const aug = must(
@@ -190,6 +300,18 @@ if (plan2028.cells[EXPECTED_COLUMN_ID] !== "9000000" || !plan2028.omitFromRollup
 const roundTrip = must(parseWorkspace(JSON.parse(JSON.stringify(seed)) as unknown), "round trip")
 const roundNote = roundTrip.boards.find((board) => board.id === "ytd")?.groups.find((group) => group.id === "improv")?.operatingResults
 if (roundNote !== IMPROV_OPERATING_RESULTS) throw new Error("operating results dropped on save")
+const roundYtd = must(roundTrip.boards.find((board) => board.id === "ytd"), "round trip ytd")
+if (!roundYtd.firmRatios) throw new Error("firm ratio flag dropped on save")
+const roundMargin = roundYtd.columns.find((column) => column.id === "gpm")
+if (roundMargin?.scope !== "firm" || roundMargin.decimals !== 0 || !roundMargin.hint) throw new Error("firm ratio column dropped on save")
+const roundCapital = roundYtd.columns.find((column) => column.id === "wkr")
+if (roundCapital?.kind !== "number" || roundCapital.decimals !== 2) throw new Error("working capital column dropped on save")
+if (roundYtd.groups.find((group) => group.id === "improv")?.metrics?.wkr !== "0.75") throw new Error("firm ratios dropped on save")
+const corruptRatios = JSON.parse(JSON.stringify(seed)) as { boards: { groups: { metrics: Record<string, unknown> }[] }[] }
+const corruptMetrics = corruptRatios.boards[0]?.groups[0]?.metrics
+if (!corruptMetrics) throw new Error("corrupt fixture")
+corruptMetrics.gpm = 0.38
+if (parseWorkspace(corruptRatios) !== null) throw new Error("numeric firm ratio accepted")
 const roundAug = roundTrip.boards
   .find((board) => board.id === "headcount")
   ?.groups.find((group) => group.id === "improv")

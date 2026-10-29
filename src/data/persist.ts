@@ -58,6 +58,7 @@ function readBoard(value: unknown): Board | null {
     columns,
     groups,
     kpis,
+    ...(value.firmRatios === true ? { firmRatios: true as const } : {}),
   }
 }
 
@@ -68,6 +69,9 @@ function readColumn(value: unknown): Column | null {
   const column: Column = { id: value.id, name: value.name, kind: value.kind as ColumnKind }
   if (value.emphasis === true) column.emphasis = true
   if (value.rollup === "skip") column.rollup = "skip"
+  if (value.scope === "firm") column.scope = "firm"
+  if (isDecimalPlaces(value.decimals)) column.decimals = value.decimals
+  if (typeof value.hint === "string") column.hint = value.hint
   if (value.formula !== undefined) {
     const formula = readFormula(value.formula)
     if (!formula) return null
@@ -105,6 +109,11 @@ function readGroup(value: unknown): BoardGroup | null {
     if (typeof value.operatingResults !== "string") return null
     group.operatingResults = value.operatingResults
   }
+  if (value.metrics !== undefined) {
+    const metrics = readCells(value.metrics)
+    if (!metrics) return null
+    group.metrics = metrics
+  }
   return group
 }
 
@@ -135,6 +144,10 @@ function readKpi(value: unknown): KpiDef | null {
   if (typeof value.labelEquals === "string") kpi.labelEquals = value.labelEquals
   if (typeof value.compareColumnId === "string") kpi.compareColumnId = value.compareColumnId
   return kpi
+}
+
+function isDecimalPlaces(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 6
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

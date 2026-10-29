@@ -77,7 +77,7 @@ function BoardScreen({ boardId }: { boardId: string }) {
             {company ? company.name : "All companies"} · FY2026
           </p>
           <h1 className="mt-1 text-4xl leading-none">{board.title}</h1>
-          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{board.subtitle}</p>
+          {board.subtitle ? <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{board.subtitle}</p> : null}
         </div>
         {canEdit ? (
           <div className="flex flex-wrap items-center gap-2">
