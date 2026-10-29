@@ -1,0 +1,271 @@
+import { useEffect, useState } from "react"
+import { useParams } from "react-router"
+import { BarChart3, Columns2, Plus, RotateCcw, Table2 } from "lucide-react"
+
+import { BoardChart } from "@/components/board-chart"
+import { BoardTable } from "@/components/board-table"
+import { Button, ConfirmDialog, Field, Input, KpiCard, Modal, Segmented, Select } from "@/components/ui"
+import { computeKpis, listCompanies } from "@/data/metrics"
+import { useWorkspace } from "@/data/store"
+import type { ColumnKind } from "@/data/types"
+import { cn } from "@/lib/cn"
+
+type ViewMode = "split" | "table" | "chart"
+
+type Pending =
+  | { kind: "reset" }
+  | { kind: "company"; id: string; name: string }
+  | { kind: "column"; id: string; name: string }
+  | null
+
+const COLUMN_KINDS: { value: ColumnKind; label: string }[] = [
+  { value: "currency", label: "Currency" },
+  { value: "number", label: "Number" },
+  { value: "percent", label: "Percent" },
+  { value: "text", label: "Text" },
+  { value: "status", label: "Status" },
+]
+
+export function BoardPage() {
+  const { boardId } = useParams()
+  const { workspace } = useWorkspace()
+  const board = workspace.boards.find((item) => item.id === boardId)
+
+  useEffect(() => {
+    document.title = board ? `${board.title} · Quarterly report` : "Board not found · Quarterly report"
+  }, [board])
+
+  if (!board) {
+    return (
+      <header>
+        <h1 className="text-4xl leading-none">Board not found</h1>
+        <p className="mt-2 text-sm text-muted-foreground">Open YTD financial results, headcount, or revenue goals.</p>
+      </header>
+    )
+  }
+
+  return <BoardScreen key={board.id} boardId={board.id} />
+}
+
+function BoardScreen({ boardId }: { boardId: string }) {
+  const { workspace, dispatch, companyId } = useWorkspace()
+  const board = workspace.boards.find((item) => item.id === boardId)
+  const [view, setView] = useState<ViewMode>("split")
+  const [columnOpen, setColumnOpen] = useState(false)
+  const [companyOpen, setCompanyOpen] = useState(false)
+  const [pending, setPending] = useState<Pending>(null)
+  if (!board) return null
+
+  const companies = listCompanies(workspace)
+  const company = companies.find((item) => item.id === companyId)
+  const kpis = computeKpis(board, companyId)
+
+  function confirmPending() {
+    if (!pending) return
+    if (pending.kind === "reset") dispatch({ type: "reset" })
+    if (pending.kind === "company") dispatch({ type: "delete-company", groupId: pending.id })
+    if (pending.kind === "column") dispatch({ type: "delete-column", boardId, columnId: pending.id })
+    setPending(null)
+  }
+
+  return (
+    <div className="space-y-6">
+      <header className="flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-[11px] uppercase tracking-widest text-muted-foreground">
+            {company ? company.name : "All companies"} · FY2026
+          </p>
+          <h1 className="mt-1 text-4xl leading-none">{board.title}</h1>
+          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{board.subtitle}</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Button onClick={() => setColumnOpen(true)}>
+            <Plus />
+            Add column
+          </Button>
+          <Button variant="outline" onClick={() => setCompanyOpen(true)}>
+            <Plus />
+            Add company
+          </Button>
+          <Button variant="ghost" onClick={() => setPending({ kind: "reset" })}>
+            <RotateCcw />
+            Reset boards
+          </Button>
+        </div>
+      </header>
+
+      <section className={cn("grid gap-3 sm:grid-cols-2", kpis.length >= 4 ? "xl:grid-cols-4" : "xl:grid-cols-3")}>
+        {kpis.map((kpi) => (
+          <KpiCard key={kpi.id} label={kpi.label} value={kpi.value} delta={kpi.deltaPct} compareLabel={kpi.compareLabel} />
+        ))}
+      </section>
+
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-[11px] uppercase tracking-widest text-muted-foreground">View</p>
+        <Segmented
+          label="View"
+          value={view}
+          onChange={setView}
+          options={[
+            { value: "split", label: "Split", icon: Columns2 },
+            { value: "table", label: "Table", icon: Table2 },
+            { value: "chart", label: "Graph", icon: BarChart3 },
+          ]}
+        />
+      </div>
+
+      {view === "chart" ? null : (
+        <BoardTable
+          board={board}
+          companyId={companyId}
+          canDeleteCompany={companies.length > 1}
+          onAddColumn={() => setColumnOpen(true)}
+          onDeleteCompany={(id, name) => setPending({ kind: "company", id, name })}
+          onDeleteColumn={(id, name) => setPending({ kind: "column", id, name })}
+        />
+      )}
+      {view === "table" ? null : <BoardChart key={board.id} board={board} companyId={companyId} />}
+
+      <AddColumnDialog boardId={board.id} open={columnOpen} onClose={() => setColumnOpen(false)} />
+      <AddCompanyDialog open={companyOpen} onClose={() => setCompanyOpen(false)} />
+      <ConfirmDialog
+        open={pending !== null}
+        title={pendingTitle(pending)}
+        description={pendingDescription(pending)}
+        confirmLabel={pendingLabel(pending)}
+        onClose={() => setPending(null)}
+        onConfirm={confirmPending}
+      />
+    </div>
+  )
+}
+
+function AddColumnDialog({ boardId, open, onClose }: { boardId: string; open: boolean; onClose: () => void }) {
+  return (
+    <Modal
+      open={open}
+      title="Add column"
+      description="Adds a column on this board. Every company gets the new cells."
+      onClose={onClose}
+    >
+      {open ? <ColumnForm boardId={boardId} onDone={onClose} /> : null}
+    </Modal>
+  )
+}
+
+function ColumnForm({ boardId, onDone }: { boardId: string; onDone: () => void }) {
+  const { dispatch } = useWorkspace()
+  const [name, setName] = useState("")
+  const [kind, setKind] = useState<ColumnKind>("currency")
+  const [error, setError] = useState("")
+
+  return (
+    <form
+      className="flex flex-col gap-4"
+      onSubmit={(event) => {
+        event.preventDefault()
+        const next = name.trim()
+        if (!next) {
+          setError("Enter a name.")
+          return
+        }
+        if (next.length > 60) {
+          setError("Use 60 characters or fewer.")
+          return
+        }
+        dispatch({ type: "add-column", boardId, name: next, kind })
+        onDone()
+      }}
+    >
+      <Field label="Name" htmlFor="column-name">
+        <Input id="column-name" autoFocus value={name} placeholder="Q4 adjustment" onChange={(event) => setName(event.target.value)} />
+      </Field>
+      <Field label="Type" htmlFor="column-kind">
+        <Select id="column-kind" value={kind} onChange={(value) => setKind(readKind(value))} options={COLUMN_KINDS} />
+      </Field>
+      {error ? <p className="text-sm text-negative">{error}</p> : null}
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" onClick={onDone}>
+          Cancel
+        </Button>
+        <Button type="submit">Add column</Button>
+      </div>
+    </form>
+  )
+}
+
+function AddCompanyDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
+  return (
+    <Modal
+      open={open}
+      title="Add company"
+      description="Adds the company to YTD results, headcount, and revenue goals."
+      onClose={onClose}
+    >
+      {open ? <CompanyForm onDone={onClose} /> : null}
+    </Modal>
+  )
+}
+
+function CompanyForm({ onDone }: { onDone: () => void }) {
+  const { dispatch } = useWorkspace()
+  const [name, setName] = useState("")
+  const [error, setError] = useState("")
+
+  return (
+    <form
+      className="flex flex-col gap-4"
+      onSubmit={(event) => {
+        event.preventDefault()
+        const next = name.trim()
+        if (!next) {
+          setError("Enter a name.")
+          return
+        }
+        if (next.length > 60) {
+          setError("Use 60 characters or fewer.")
+          return
+        }
+        dispatch({ type: "add-company", name: next })
+        onDone()
+      }}
+    >
+      <Field label="Name" htmlFor="company-name">
+        <Input id="company-name" autoFocus value={name} placeholder="Northwind" onChange={(event) => setName(event.target.value)} />
+      </Field>
+      {error ? <p className="text-sm text-negative">{error}</p> : null}
+      <div className="flex justify-end gap-2">
+        <Button variant="outline" onClick={onDone}>
+          Cancel
+        </Button>
+        <Button type="submit">Add company</Button>
+      </div>
+    </form>
+  )
+}
+
+function readKind(value: string): ColumnKind {
+  if (value === "text" || value === "number" || value === "currency" || value === "percent" || value === "status") return value
+  return "currency"
+}
+
+function pendingTitle(pending: Pending): string {
+  if (pending?.kind === "reset") return "Reset boards?"
+  if (pending?.kind === "company") return "Delete company?"
+  if (pending?.kind === "column") return "Delete column?"
+  return "Confirm"
+}
+
+function pendingDescription(pending: Pending): string {
+  if (pending?.kind === "reset") return "Restores the Q3 close and the Q4 seed figures. Edits saved in this browser are discarded."
+  if (pending?.kind === "company") return `This removes ${pending.name} from YTD results, headcount, and revenue goals.`
+  if (pending?.kind === "column") return `This removes ${pending.name} and its cells from this board.`
+  return ""
+}
+
+function pendingLabel(pending: Pending): string {
+  if (pending?.kind === "reset") return "Reset boards"
+  if (pending?.kind === "company") return "Delete company"
+  if (pending?.kind === "column") return "Delete column"
+  return "Confirm"
+}

@@ -1,0 +1,34 @@
+{
+  "name": "q3-boards",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Q3 portfolio boards. Edit Q4 figures by company, then graph them as bar, pie, or scatter.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "verify": "tsc --noEmit && tsx scripts/check.ts"
+  },
+  "dependencies": {
+    "clsx": "^2.1.1",
+    "lucide-react": "^0.475.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router": "^7.18.1",
+    "recharts": "^2.15.4",
+    "tailwind-merge": "^3.0.2"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.0.9",
+    "@types/node": "^22.13.5",
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "@vitejs/plugin-react": "^4.3.4",
+    "tailwindcss": "^4.0.9",
+    "tsx": "^4.19.3",
+    "typescript": "~5.7.3",
+    "vite": "^6.2.0"
+  }
+}

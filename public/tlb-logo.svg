@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="The Launch Box">
+  <rect width="64" height="64" fill="#000000"/>
+  <path d="M42 8h14v14h-5v-5.2L40.6 27.2 36.2 22.8 46.6 12.4H42V8z" fill="#FF6600"/>
+  <text x="6" y="36" fill="#FFFFFF" font-family="Arial Black, Impact, sans-serif" font-size="8.5" letter-spacing="0.4">THE LAUNCH</text>
+  <text x="6" y="52" fill="#FFFFFF" font-family="Arial Black, Impact, sans-serif" font-size="18" letter-spacing="0.6">BOX</text>
+</svg>

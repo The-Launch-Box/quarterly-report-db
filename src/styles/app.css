@@ -1,0 +1,513 @@
+/*
+ * TLB tokens, mirrored from tlb-design-system/src/styles/tailwind.css.
+ * Dark-first internal tool: orange is for action and focus, green and red are data.
+ */
+
+@import "tailwindcss";
+@source "../";
+
+@theme {
+  --color-tlb-orange: #ff6600;
+  --color-tlb-dark-orange: #ff3300;
+  --color-tlb-black: #000000;
+  --color-tlb-charcoal: #1a1a1a;
+  --color-tlb-white: #ffffff;
+  --color-tlb-gray-50: #f5f5f5;
+  --color-tlb-gray-100: #e5e5e5;
+  --color-tlb-orange-tint: #fff8f4;
+
+  --color-tlb-bg-0: #0d1117;
+  --color-tlb-bg-1: #161b22;
+  --color-tlb-bg-2: #1c2128;
+  --color-tlb-bg-3: #262c36;
+  --color-tlb-border-dark: #30363d;
+  --color-tlb-border-muted: #21262d;
+  --color-tlb-text-dark: #f0f6fc;
+  --color-tlb-muted-dark: #8b949e;
+  --color-tlb-faint-dark: #6e7681;
+  --color-tlb-positive: #4ade80;
+  --color-tlb-positive-dim: #1c3829;
+  --color-tlb-negative: #f87171;
+  --color-tlb-negative-dim: #3a2122;
+  --color-tlb-warning: #fbbf24;
+  --color-tlb-warning-dim: #3a3320;
+  --color-tlb-info: #58a6ff;
+  --color-tlb-info-dim: #16304d;
+  --color-tlb-orange-soft: #ff844d;
+  --color-tlb-orange-dim: #2b1a0f;
+
+  --color-background: var(--color-tlb-white);
+  --color-foreground: var(--color-tlb-black);
+  --color-card: var(--color-tlb-white);
+  --color-card-foreground: var(--color-tlb-black);
+  --color-popover: var(--color-tlb-white);
+  --color-popover-foreground: var(--color-tlb-black);
+  --color-primary: var(--color-tlb-orange);
+  --color-primary-foreground: var(--color-tlb-white);
+  --color-secondary: var(--color-tlb-charcoal);
+  --color-secondary-foreground: var(--color-tlb-white);
+  --color-destructive: var(--color-tlb-dark-orange);
+  --color-destructive-foreground: var(--color-tlb-white);
+  --color-muted: var(--color-tlb-gray-50);
+  --color-muted-foreground: var(--color-tlb-charcoal);
+  --color-accent: var(--color-tlb-orange-tint);
+  --color-accent-foreground: var(--color-tlb-black);
+  --color-border: var(--color-tlb-gray-100);
+  --color-input: var(--color-tlb-gray-100);
+  --color-ring: var(--color-tlb-orange);
+
+  --color-bg-canvas: var(--color-tlb-white);
+  --color-bg-surface: var(--color-tlb-white);
+  --color-bg-raised: var(--color-tlb-gray-50);
+  --color-bg-overlay: var(--color-tlb-white);
+  --color-border-soft: var(--color-tlb-gray-100);
+  --color-fg-faint: var(--color-tlb-charcoal);
+  --color-accent-wash: var(--color-tlb-orange-tint);
+  --color-accent-soft: var(--color-tlb-orange-soft);
+  --color-positive: var(--color-tlb-positive);
+  --color-positive-dim: var(--color-tlb-positive-dim);
+  --color-negative: var(--color-tlb-negative);
+  --color-negative-dim: var(--color-tlb-negative-dim);
+  --color-warning: var(--color-tlb-warning);
+  --color-warning-dim: var(--color-tlb-warning-dim);
+  --color-info: var(--color-tlb-info);
+  --color-info-dim: var(--color-tlb-info-dim);
+
+  --color-chart-1: var(--color-tlb-orange);
+  --color-chart-2: var(--color-tlb-charcoal);
+  --color-chart-3: var(--color-tlb-dark-orange);
+  --color-chart-4: #8c5a2e;
+  --color-chart-5: #4a4a4a;
+
+  /* Portco palettes from tlb-design-system. Hex stays in this file. */
+  --color-echelon-blue: #000066;
+  --color-echelon-blue-dark: #00004d;
+  --color-echelon-blue-light: #2a3da8;
+  --color-echelon-yellow: #e0ff00;
+  --color-echelon-red: #ff0033;
+  --color-echelon-off-white: #f2f2f2;
+
+  --color-improv-obsidian: #090b0c;
+  --color-improv-surface: #11181b;
+  --color-improv-strategic-blue: #003b59;
+  --color-improv-noir-plum: #590341;
+  --color-improv-raspberry: #cc3366;
+  --color-improv-sienna: #d86a39;
+  --color-improv-aqua: #9cd0d8;
+  --color-improv-off-white: #f2f2f2;
+
+  --color-hyper-foundation: #0b105b;
+  --color-hyper-foundation-dark: #070a3d;
+  --color-hyper-pink: #f2055c;
+  --color-hyper-blue: #11eafb;
+  --color-hyper-green: #01f34f;
+  --color-hyper-red: #ff3300;
+  --color-hyper-off-white: #eaf0ff;
+  --color-hyper-ink: #07091f;
+
+  --color-vescape-blue: #330066;
+  --color-vescape-blue-dark: #1a0033;
+  --color-vescape-magenta: #ff0066;
+  --color-vescape-yellow: #ffff00;
+  --color-vescape-purple: #660099;
+  --color-vescape-gray: #e8e8e8;
+  --color-vescape-white: #ffffff;
+
+  --color-trail-blue: #074e75;
+  --color-blaze-magenta: #ff2e78;
+  --color-blaze-blue: #00dbff;
+  --color-trail-dirt: #d9ddca;
+  --color-trail-white: #f1f1ec;
+  --color-trail-black: #161615;
+
+  --color-dxf-black: #05010b;
+  --color-dxf-horizon: #163259;
+  --color-dxf-nebula: #f02d57;
+  --color-dxf-violet: #8585cb;
+  --color-dxf-discovery: #f9dfca;
+  --color-dxf-aero: #c0d4ea;
+  --color-dxf-off-white: #fdf6f3;
+
+  --font-display: "Bebas Neue", "Arial Black", Impact, sans-serif;
+  --font-sans: "Manrope", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Code", "Source Code Pro", Menlo, monospace;
+
+  --radius: 0.375rem;
+  --radius-sm: calc(var(--radius) - 2px);
+  --radius-md: var(--radius);
+  --radius-lg: calc(var(--radius) + 2px);
+  --radius-xl: calc(var(--radius) + 4px);
+
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+  --duration-slow: 280ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.dark {
+  --color-background: var(--color-tlb-bg-0);
+  --color-foreground: var(--color-tlb-text-dark);
+  --color-card: var(--color-tlb-bg-1);
+  --color-card-foreground: var(--color-tlb-text-dark);
+  --color-popover: var(--color-tlb-bg-1);
+  --color-popover-foreground: var(--color-tlb-text-dark);
+  --color-secondary: var(--color-tlb-bg-2);
+  --color-secondary-foreground: var(--color-tlb-text-dark);
+  --color-muted: var(--color-tlb-bg-2);
+  --color-muted-foreground: var(--color-tlb-muted-dark);
+  --color-accent: var(--color-tlb-bg-2);
+  --color-accent-foreground: var(--color-tlb-text-dark);
+  --color-border: var(--color-tlb-border-dark);
+  --color-input: var(--color-tlb-bg-2);
+  --color-ring: var(--color-tlb-orange);
+  --color-bg-canvas: var(--color-tlb-bg-0);
+  --color-bg-surface: var(--color-tlb-bg-1);
+  --color-bg-raised: var(--color-tlb-bg-2);
+  --color-bg-overlay: var(--color-tlb-bg-3);
+  --color-border-soft: var(--color-tlb-border-muted);
+  --color-fg-faint: var(--color-tlb-faint-dark);
+  --color-accent-wash: var(--color-tlb-orange-dim);
+  --color-accent-soft: var(--color-tlb-orange-soft);
+  color-scheme: dark;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  html,
+  body {
+    background: var(--color-background);
+    color: var(--color-foreground);
+    font-family: var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  h1,
+  h2,
+  h3,
+  h4 {
+    font-family: var(--font-display);
+    text-transform: uppercase;
+    letter-spacing: -0.01em;
+  }
+
+  :focus-visible {
+    outline: none;
+  }
+
+  ::selection {
+    background: rgba(255, 102, 0, 0.35);
+    color: var(--color-tlb-white);
+  }
+}
+
+dialog {
+  margin: auto;
+  width: calc(100% - 2rem);
+  max-width: 28rem;
+  padding: 0;
+  color: inherit;
+  background: var(--color-bg-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 0.75rem;
+}
+
+dialog::backdrop {
+  background: rgba(13, 17, 23, 0.72);
+  backdrop-filter: blur(8px);
+}
+
+.swatch { background-color: var(--color-tlb-orange); }
+.swatch[data-brand="echelon"] { background-color: var(--color-echelon-yellow); }
+.swatch[data-brand="improv"] { background-color: var(--color-improv-aqua); }
+.swatch[data-brand="hyperscayle"] { background-color: var(--color-hyper-pink); }
+.swatch[data-brand="vescape"] { background-color: var(--color-vescape-magenta); }
+.swatch[data-brand="bluetrail"] { background-color: var(--color-blaze-blue); }
+.swatch[data-brand="dxfoundation"] { background-color: var(--color-dxf-nebula); }
+
+.group-rule { box-shadow: inset 3px 0 0 var(--color-tlb-orange); }
+.group-rule[data-brand="echelon"] {
+  box-shadow: inset 3px 0 0 var(--color-echelon-yellow);
+  background-color: color-mix(in srgb, var(--color-echelon-blue) 46%, var(--color-bg-raised));
+}
+.group-rule[data-brand="improv"] {
+  box-shadow: inset 3px 0 0 var(--color-improv-aqua);
+  background-color: color-mix(in srgb, var(--color-improv-strategic-blue) 58%, var(--color-bg-raised));
+}
+.group-rule[data-brand="hyperscayle"] {
+  box-shadow: inset 3px 0 0 var(--color-hyper-pink);
+  background-color: color-mix(in srgb, var(--color-hyper-foundation) 62%, var(--color-bg-raised));
+}
+.group-rule[data-brand="vescape"] {
+  box-shadow: inset 3px 0 0 var(--color-vescape-magenta);
+  background-color: color-mix(in srgb, var(--color-vescape-blue) 58%, var(--color-bg-raised));
+}
+.group-rule[data-brand="bluetrail"] {
+  box-shadow: inset 3px 0 0 var(--color-blaze-blue);
+  background-color: color-mix(in srgb, var(--color-trail-blue) 50%, var(--color-bg-raised));
+}
+.group-rule[data-brand="dxfoundation"] {
+  box-shadow: inset 3px 0 0 var(--color-dxf-nebula);
+  background-color: color-mix(in srgb, var(--color-dxf-horizon) 70%, var(--color-bg-raised));
+}
+
+.company-name[data-brand="echelon"] {
+  color: var(--color-echelon-yellow);
+  font-family: "Barlow Condensed", system-ui, sans-serif;
+  font-size: 1.125rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.company-name[data-brand="improv"] {
+  color: var(--color-improv-aqua);
+  font-family: Lustria, Georgia, serif;
+}
+.company-name[data-brand="hyperscayle"] {
+  color: var(--color-hyper-pink);
+  font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  letter-spacing: -0.03em;
+}
+.company-name[data-brand="vescape"] {
+  color: var(--color-vescape-magenta);
+  font-family: Archivo, "Helvetica Neue", sans-serif;
+  font-style: italic;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+.company-name[data-brand="bluetrail"] {
+  color: var(--color-blaze-blue);
+  font-family: Sora, ui-sans-serif, system-ui, sans-serif;
+}
+.company-name[data-brand="dxfoundation"] {
+  color: var(--color-dxf-nebula);
+  font-family: Chivo, ui-sans-serif, system-ui, sans-serif;
+}
+
+[data-portco] .company-name {
+  color: inherit;
+  font-family: var(--font-display);
+}
+
+/* Single-company data views. The TLB shell stays outside this scope. */
+[data-portco] {
+  background: var(--color-background);
+  color: var(--color-foreground);
+  font-family: var(--font-sans);
+  --color-bg-canvas: var(--color-background);
+  --color-bg-surface: var(--color-card);
+  --color-bg-raised: color-mix(in srgb, var(--color-foreground) 8%, var(--color-card));
+  --color-bg-overlay: color-mix(in srgb, var(--color-foreground) 14%, var(--color-card));
+  --color-border-soft: color-mix(in srgb, var(--color-border) 72%, var(--color-card));
+  --color-fg-faint: color-mix(in srgb, var(--color-foreground) 58%, var(--color-background));
+  --color-accent-wash: color-mix(in srgb, var(--color-primary) 18%, var(--color-card));
+  --color-accent-soft: color-mix(in srgb, var(--color-primary) 82%, white);
+  color-scheme: dark;
+}
+
+[data-portco] h1,
+[data-portco] h2,
+[data-portco] h3,
+[data-portco] h4 {
+  text-transform: none;
+  letter-spacing: normal;
+}
+
+[data-portco="echelon"] {
+  --color-background: var(--color-echelon-blue);
+  --color-foreground: var(--color-echelon-yellow);
+  --color-card: var(--color-echelon-blue-dark);
+  --color-card-foreground: var(--color-echelon-off-white);
+  --color-popover: var(--color-echelon-blue-dark);
+  --color-popover-foreground: var(--color-echelon-off-white);
+  --color-primary: var(--color-echelon-yellow);
+  --color-primary-foreground: var(--color-echelon-blue);
+  --color-secondary: var(--color-echelon-blue-light);
+  --color-secondary-foreground: var(--color-echelon-off-white);
+  --color-destructive: var(--color-echelon-red);
+  --color-destructive-foreground: var(--color-echelon-off-white);
+  --color-muted: var(--color-echelon-blue-dark);
+  --color-muted-foreground: var(--color-echelon-off-white);
+  --color-accent: var(--color-echelon-red);
+  --color-accent-foreground: var(--color-echelon-off-white);
+  --color-border: var(--color-echelon-blue-light);
+  --color-input: var(--color-echelon-blue-light);
+  --color-ring: var(--color-echelon-yellow);
+  --font-display: "Barlow Condensed", system-ui, sans-serif;
+  --font-sans: Inter, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --radius: 0;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+}
+
+[data-portco="improv"] {
+  --color-background: var(--color-improv-obsidian);
+  --color-foreground: var(--color-improv-off-white);
+  --color-card: var(--color-improv-surface);
+  --color-card-foreground: var(--color-improv-off-white);
+  --color-popover: var(--color-improv-surface);
+  --color-popover-foreground: var(--color-improv-off-white);
+  --color-primary: var(--color-improv-aqua);
+  --color-primary-foreground: var(--color-improv-obsidian);
+  --color-secondary: var(--color-improv-strategic-blue);
+  --color-secondary-foreground: var(--color-improv-off-white);
+  --color-destructive: var(--color-improv-raspberry);
+  --color-destructive-foreground: var(--color-improv-off-white);
+  --color-muted: var(--color-improv-strategic-blue);
+  --color-muted-foreground: var(--color-improv-off-white);
+  --color-accent: var(--color-improv-raspberry);
+  --color-accent-foreground: var(--color-improv-off-white);
+  --color-border: var(--color-improv-strategic-blue);
+  --color-input: var(--color-improv-strategic-blue);
+  --color-ring: var(--color-improv-aqua);
+  --font-display: Lustria, "Iowan Old Style", Georgia, serif;
+  --font-sans: "Work Sans", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --radius: 0.125rem;
+  --radius-sm: 0.125rem;
+  --radius-md: 0.125rem;
+  --radius-lg: 0.25rem;
+  --radius-xl: 0.375rem;
+}
+
+[data-portco="hyperscayle"] {
+  --color-background: var(--color-hyper-foundation);
+  --color-foreground: var(--color-hyper-off-white);
+  --color-card: var(--color-hyper-foundation-dark);
+  --color-card-foreground: var(--color-hyper-off-white);
+  --color-popover: var(--color-hyper-foundation-dark);
+  --color-popover-foreground: var(--color-hyper-off-white);
+  --color-primary: var(--color-hyper-pink);
+  --color-primary-foreground: var(--color-hyper-ink);
+  --color-secondary: var(--color-hyper-blue);
+  --color-secondary-foreground: var(--color-hyper-foundation);
+  --color-destructive: var(--color-hyper-red);
+  --color-destructive-foreground: var(--color-hyper-off-white);
+  --color-muted: var(--color-hyper-foundation-dark);
+  --color-muted-foreground: var(--color-hyper-blue);
+  --color-accent: var(--color-hyper-green);
+  --color-accent-foreground: var(--color-hyper-foundation);
+  --color-border: var(--color-hyper-blue);
+  --color-input: var(--color-hyper-foundation-dark);
+  --color-ring: var(--color-hyper-blue);
+  --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
+  --radius: 0.25rem;
+  --radius-sm: 0.125rem;
+  --radius-md: 0.25rem;
+  --radius-lg: 0.375rem;
+  --radius-xl: 0.5rem;
+}
+
+[data-portco="vescape"] {
+  --color-background: var(--color-vescape-blue);
+  --color-foreground: var(--color-vescape-white);
+  --color-card: var(--color-vescape-blue-dark);
+  --color-card-foreground: var(--color-vescape-white);
+  --color-popover: var(--color-vescape-blue-dark);
+  --color-popover-foreground: var(--color-vescape-white);
+  --color-primary: var(--color-vescape-magenta);
+  --color-primary-foreground: var(--color-vescape-blue-dark);
+  --color-secondary: var(--color-vescape-purple);
+  --color-secondary-foreground: var(--color-vescape-white);
+  --color-destructive: var(--color-vescape-magenta);
+  --color-destructive-foreground: var(--color-vescape-white);
+  --color-muted: var(--color-vescape-blue-dark);
+  --color-muted-foreground: var(--color-vescape-gray);
+  --color-accent: var(--color-vescape-yellow);
+  --color-accent-foreground: var(--color-vescape-blue);
+  --color-border: var(--color-vescape-purple);
+  --color-input: var(--color-vescape-blue-dark);
+  --color-ring: var(--color-vescape-yellow);
+  --font-display: Archivo, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-sans: Archivo, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --radius: 0;
+  --radius-sm: 0;
+  --radius-md: 0;
+  --radius-lg: 0;
+  --radius-xl: 0;
+}
+
+[data-portco="bluetrail"] {
+  --color-background: var(--color-trail-white);
+  --color-foreground: var(--color-trail-black);
+  --color-card: var(--color-tlb-white);
+  --color-card-foreground: var(--color-trail-black);
+  --color-popover: var(--color-tlb-white);
+  --color-popover-foreground: var(--color-trail-black);
+  --color-primary: var(--color-trail-blue);
+  --color-primary-foreground: var(--color-trail-white);
+  --color-secondary: var(--color-blaze-blue);
+  --color-secondary-foreground: var(--color-trail-black);
+  --color-destructive: var(--color-blaze-magenta);
+  --color-destructive-foreground: var(--color-trail-white);
+  --color-muted: var(--color-trail-dirt);
+  --color-muted-foreground: var(--color-trail-black);
+  --color-accent: var(--color-blaze-magenta);
+  --color-accent-foreground: var(--color-trail-black);
+  --color-border: var(--color-trail-dirt);
+  --color-input: var(--color-trail-dirt);
+  --color-ring: var(--color-trail-blue);
+  --font-display: Sora, ui-sans-serif, system-ui, sans-serif;
+  --font-sans: Lato, "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --radius: 0.5rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  color-scheme: light;
+}
+
+[data-portco="dxfoundation"] {
+  --color-background: var(--color-dxf-black);
+  --color-foreground: var(--color-dxf-off-white);
+  --color-card: var(--color-dxf-horizon);
+  --color-card-foreground: var(--color-dxf-off-white);
+  --color-popover: var(--color-dxf-horizon);
+  --color-popover-foreground: var(--color-dxf-off-white);
+  --color-primary: var(--color-dxf-nebula);
+  --color-primary-foreground: var(--color-dxf-black);
+  --color-secondary: var(--color-dxf-violet);
+  --color-secondary-foreground: var(--color-dxf-black);
+  --color-destructive: var(--color-dxf-nebula);
+  --color-destructive-foreground: var(--color-dxf-off-white);
+  --color-muted: var(--color-dxf-horizon);
+  --color-muted-foreground: var(--color-dxf-aero);
+  --color-accent: var(--color-dxf-aero);
+  --color-accent-foreground: var(--color-dxf-black);
+  --color-border: var(--color-dxf-violet);
+  --color-input: var(--color-dxf-horizon);
+  --color-ring: var(--color-dxf-nebula);
+  --font-display: Chivo, ui-sans-serif, system-ui, sans-serif;
+  --font-sans: Inter, ui-sans-serif, system-ui, sans-serif;
+  --radius: 0.5rem;
+  --radius-sm: 0.375rem;
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+}
+
+@keyframes cell-flash {
+  from { background-color: var(--color-accent-wash); }
+  to { background-color: transparent; }
+}
+
+.cell-flash {
+  animation: cell-flash var(--duration-slow) var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cell-flash {
+    animation: none;
+  }
+}
