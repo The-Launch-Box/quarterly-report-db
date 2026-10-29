@@ -161,9 +161,16 @@ if (must(custom.boards.find((board) => board.id === "ytd"), "ytd after firm").gr
 if (!reducer(custom, { type: "delete-board", boardId: "ytd" }).boards.some((board) => board.id === "ytd")) {
   throw new Error("ytd was deleted")
 }
-if (reducer(custom, { type: "rename-board", boardId: "ytd", title: "Nope" }).boards.find((board) => board.id === "ytd")?.title === "Nope") {
-  throw new Error("ytd was renamed")
+const renamedYtd = reducer(custom, { type: "rename-board", boardId: "ytd", title: "  Results " })
+if (renamedYtd.boards.find((board) => board.id === "ytd")?.title !== "Results") throw new Error("ytd was not renamed")
+if (reducer(renamedYtd, { type: "rename-board", boardId: "ytd", title: "Results" }) !== renamedYtd) {
+  throw new Error("the same board title was written again")
 }
+if (reducer(seed, { type: "rename-board", boardId: "missing", title: "Nope" }) !== seed) {
+  throw new Error("a missing board was renamed")
+}
+const roundTitle = must(parseWorkspace(JSON.parse(JSON.stringify(renamedYtd)) as unknown), "renamed title round trip")
+if (roundTitle.boards.find((board) => board.id === "ytd")?.title !== "Results") throw new Error("renamed title dropped on save")
 const renamed = reducer(custom, { type: "rename-board", boardId: "board-pipeline", title: "Hiring" })
 if (renamed.boards.find((board) => board.id === "board-pipeline")?.title !== "Hiring") throw new Error("custom board was not renamed")
 if (pipeline.subtitle !== "") throw new Error("custom board should start without a description")

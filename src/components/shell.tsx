@@ -10,10 +10,10 @@ import { useWorkspace } from "@/data/store"
 import { cn } from "@/lib/cn"
 import { BrandMark, Button, Select } from "@/components/ui"
 
-const NAV: { to: string; label: string; icon: LucideIcon }[] = [
-  { to: "/ytd", label: "YTD financial results", icon: Wallet },
-  { to: "/headcount", label: "Headcount", icon: Users },
-  { to: "/revenue", label: "Revenue goals", icon: Target },
+const NAV: { id: string; icon: LucideIcon }[] = [
+  { id: "ytd", icon: Wallet },
+  { id: "headcount", icon: Users },
+  { id: "revenue", icon: Target },
 ]
 
 export function Shell() {
@@ -124,9 +124,11 @@ function BoardNav({ layout }: { layout: "stack" | "wrap" }) {
       aria-label="Boards"
     >
       <div className={layout === "stack" ? "flex max-h-[40vh] flex-col gap-1 overflow-y-auto" : "contents"}>
-        {NAV.map((item) => (
-          <BoardLink key={item.to} {...item} />
-        ))}
+        {NAV.map((item) => {
+          const board = workspace.boards.find((entry) => entry.id === item.id)
+          if (!board) return null
+          return <BoardLink key={board.id} to={`/${board.id}`} label={board.title} icon={item.icon} />
+        })}
         {custom.map((board) => (
           <BoardLink key={board.id} to={`/${board.id}`} label={board.title} circle />
         ))}

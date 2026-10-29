@@ -3,6 +3,7 @@ import { useParams } from "react-router"
 import { BarChart3, Columns2, Plus, RotateCcw, Table2 } from "lucide-react"
 
 import { BoardChart } from "@/components/board-chart"
+import { BoardTitle } from "@/components/board-title"
 import { BoardTable } from "@/components/board-table"
 import { CustomBoardScreen } from "@/components/custom-board"
 import { YtdOperatingResults } from "@/components/operating-results"
@@ -82,7 +83,11 @@ function BoardScreen({ boardId }: { boardId: string }) {
           <p className="text-[11px] uppercase tracking-widest text-muted-foreground">
             {company ? company.name : "All firms"} · FY2026
           </p>
-          <h1 className="mt-1 text-4xl leading-none">{board.title}</h1>
+          <BoardTitle
+            title={board.title}
+            canEdit={canEdit}
+            onRename={(title) => dispatch({ type: "rename-board", boardId, title })}
+          />
           {board.subtitle ? <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{board.subtitle}</p> : null}
         </div>
         {canEdit ? (

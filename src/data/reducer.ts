@@ -522,7 +522,9 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
     case "rename-board": {
       const title = action.title.trim()
       if (!title || title.length > 60) return workspace
-      return mapBoard(workspace, action.boardId, (board) => (board.firmId ? { ...board, title } : board))
+      const board = workspace.boards.find((item) => item.id === action.boardId)
+      if (!board || board.title === title) return workspace
+      return mapBoard(workspace, action.boardId, (current) => ({ ...current, title }))
     }
     case "set-board-subtitle": {
       const subtitle = action.subtitle.trim().replace(/\s+/g, " ")
