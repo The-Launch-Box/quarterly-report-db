@@ -49,8 +49,11 @@ export function uniqueLabels(board: Board): string[] {
 
 /** A ratio row keeps its own figures in the currency columns. */
 export function measuredColumn(column: Column, row: BoardRow): Column {
-  if (!row.measure || column.kind !== "currency") return column
-  return { ...column, kind: row.measure, decimals: row.measure === "percent" ? 0 : 2, formula: undefined }
+  if (!row.measure) return column
+  if (column.kind !== "currency" && column.kind !== "percent" && column.kind !== "number") return column
+  const decimals = row.measure === "percent" ? 0 : 2
+  if (column.kind === row.measure && column.decimals === decimals && !column.formula) return column
+  return { ...column, kind: row.measure, decimals, formula: undefined }
 }
 
 export function cellNumber(column: Column, row: BoardRow, columns: Column[], depth = 0): number | null {

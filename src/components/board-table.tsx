@@ -1,13 +1,106 @@
-import { useEffect, useRef, useState } from "react"
+import { Fragment, useEffect, useRef, useState } from "react"
 import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react"
 
 import { aggregateColumn, cellNumber, formatColumnValue, measuredColumn } from "@/data/metrics"
 import { formatCurrency, formatNumber, formatPercent, parseNumber, parsePercentInput } from "@/data/format"
 import { useWorkspace } from "@/data/store"
-import { LABEL_COLUMN_ID, STATUS_VALUES, type Board, type BoardRow, type Column, type ColumnKind, type StatusValue } from "@/data/types"
+import { EXPECTED_COLUMN_ID, LABEL_COLUMN_ID, STATUS_VALUES, type Board, type BoardRow, type Column, type ColumnKind, type StatusValue } from "@/data/types"
 import { cn } from "@/lib/cn"
 import { ColumnResizeHandle, resizeCeiling, storedColumnWidth, tablePixelWidth, useColumnWidths, useFrameWidth } from "@/components/column-resize"
 import { Button, Input } from "@/components/ui"
+
+const RATIO_COLUMNS: Column[] = [
+  { id: LABEL_COLUMN_ID, name: "Ratio", kind: "text" },
+  { id: EXPECTED_COLUMN_ID, name: "Target", kind: "percent", decimals: 0 },
+  { id: "q3", name: "Q3", kind: "percent", decimals: 0 },
+  { id: "ytd", name: "YTD", kind: "percent", decimals: 0 },
+]
+
+export function FirmRatioTables({ board, companyId }: { board: Board; companyId: string }) {
+  const { dispatch, canEdit } = useWorkspace()
+  const groups = (companyId === "all" ? board.groups : board.groups.filter((group) => group.id === companyId)).filter(
+    (group) => (group.ratios?.length ?? 0) > 0,
+  )
+  if (groups.length === 0) return null
+
+  return (
+    <section className="space-y-3">
+      <h2 className="text-xl">Ratios</h2>
+      <div className="overflow-auto rounded-lg border border-border bg-card">
+        <table className="w-full min-w-[40rem] border-separate border-spacing-0 text-sm">
+          <caption className="sr-only">Ratios</caption>
+          <thead>
+            <tr>
+              {RATIO_COLUMNS.map((column) => (
+                <th
+                  key={column.id}
+                  scope="col"
+                  className={cn(
+                    "sticky top-0 z-10 border-b border-border bg-card px-2 py-2 text-left text-[11px] font-medium tracking-widest text-muted-foreground uppercase",
+                    column.id === LABEL_COLUMN_ID && "w-[40%]",
+                    isNumeric(column.kind) && "text-right",
+                  )}
+                >
+                  {column.name}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map((group) => (
+              <Fragment key={group.id}>
+                <tr>
+                  <td colSpan={RATIO_COLUMNS.length} className="border-b border-border-soft bg-bg-raised px-3 py-2" data-brand={group.id}>
+                    <span className="inline-flex items-center gap-2 font-medium">
+                      <span className="swatch size-2.5 shrink-0 rounded-sm" data-brand={group.id} aria-hidden="true" />
+                      {group.name}
+                    </span>
+                  </td>
+                </tr>
+                {group.ratios?.map((row) => (
+                  <tr key={row.id} className="group">
+                    {RATIO_COLUMNS.map((column) => {
+                      const previous = row.cells[column.id] ?? ""
+                      return (
+                        <td
+                          key={column.id}
+                          className={cn(
+                            "border-b border-border-soft bg-card px-1 py-1 group-hover:bg-bg-raised",
+                            column.id === LABEL_COLUMN_ID && "px-3",
+                          )}
+                        >
+                          <EditableCell
+                            column={column}
+                            columns={RATIO_COLUMNS}
+                            row={row}
+                            raw={previous}
+                            editable={canEdit && column.id !== LABEL_COLUMN_ID}
+                            ariaLabel={`${column.name} for ${row.cells[LABEL_COLUMN_ID] ?? "ratio"} at ${group.name}`}
+                            onCommit={(value) => {
+                              if (value === previous) return
+                              dispatch({
+                                type: "set-cell",
+                                boardId: board.id,
+                                groupId: group.id,
+                                rowId: row.id,
+                                columnId: column.id,
+                                value,
+                              })
+                            }}
+                          />
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))}
+              </Fragment>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  )
+}
 
 interface BoardTableProps {
   board: Board

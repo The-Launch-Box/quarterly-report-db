@@ -3,7 +3,7 @@ import { useParams } from "react-router"
 import { BarChart3, Columns2, Plus, RotateCcw, Table2 } from "lucide-react"
 
 import { BoardChart } from "@/components/board-chart"
-import { BoardTable } from "@/components/board-table"
+import { BoardTable, FirmRatioTables } from "@/components/board-table"
 import { CustomBoardScreen } from "@/components/custom-board"
 import { YtdOperatingResults } from "@/components/operating-results"
 import { Button, ConfirmDialog, Field, Input, KpiCard, Modal, Segmented, Select } from "@/components/ui"
@@ -137,6 +137,7 @@ function BoardScreen({ boardId }: { boardId: string }) {
           onDeleteColumn={(id, name) => setPending({ kind: "column", id, name })}
         />
       )}
+      {view === "chart" || board.id !== "ytd" ? null : <FirmRatioTables board={board} companyId={companyId} />}
       {view === "table" ? null : <BoardChart key={board.id} board={board} companyId={companyId} />}
 
       <AddColumnDialog boardId={board.id} open={columnOpen} onClose={() => setColumnOpen(false)} />

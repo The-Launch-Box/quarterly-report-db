@@ -153,7 +153,6 @@ const IMPROV_RATIO_PERIODS: Record<string, { expected: string; q3: string }> = {
   wkr: { expected: "1.50", q3: "1.38" },
 }
 
-const STATEMENT_LINES = new Set(["Revenue", "Gross profit", "Operating expenses", "EBITDA", "Net income"])
 
 const IMPROV_FIRM_RATIOS: Record<string, string> = {
   gpm: "0.38",
@@ -283,69 +282,61 @@ export function withoutYtdSubtitle(workspace: Workspace): Workspace {
   return changed ? { ...workspace, boards } : workspace
 }
 
-/** Turns the old ratio columns into rows under income, and adds those rows to a saved board once. */
+/** Gives every firm a ratio table, and moves older ratio columns or income-statement rows into it. */
 export function withFirmRatios(workspace: Workspace): Workspace {
   let changed = false
   const boards = workspace.boards.map((board) => {
     if (board.id !== "ytd") return board
-    const next = placeRatioRows(board)
+    const next = placeRatioTable(board)
     if (next !== board) changed = true
     return next
   })
   return changed ? { ...workspace, boards } : workspace
 }
 
-function placeRatioRows(board: Board): Board {
+function placeRatioTable(board: Board): Board {
   const dropColumns = board.columns.some((column) => column.scope === "firm" || RATIO_IDS.has(column.id))
   const columns = dropColumns
     ? board.columns.filter((column) => column.scope !== "firm" && !RATIO_IDS.has(column.id))
     : board.columns
-  const groups = board.groups.map((group) => placeGroupRatios(group, board.ratioRows === true))
+  const groups = board.groups.map((group) => placeGroupRatios(group, board.ratioTable === true))
   const groupsSame = groups.every((group, index) => group === board.groups[index])
-  if (!dropColumns && groupsSame && board.ratioRows && !board.firmRatios) return board
-  const next: Board = { ...board, columns, groups, ratioRows: true }
+  if (!dropColumns && groupsSame && board.ratioTable && !board.firmRatios && !board.ratioRows) return board
+  const next: Board = { ...board, columns, groups, ratioTable: true }
   delete next.firmRatios
+  delete next.ratioRows
   return next
 }
 
-function placeGroupRatios(group: BoardGroup, alreadyPlaced: boolean): BoardGroup {
-  const rows = alreadyPlaced ? group.rows : insertRatioRows(group)
+function placeGroupRatios(group: BoardGroup, tableReady: boolean): BoardGroup {
+  const lifted = group.rows.filter(isRatioRow)
+  const rows = lifted.length > 0 ? group.rows.filter((row) => !isRatioRow(row)) : group.rows
+  const ratios = tableReady && lifted.length === 0 ? group.ratios : buildRatios(group, lifted, !tableReady)
   const metrics = withoutRatioMetrics(group.metrics)
-  if (rows === group.rows && metrics === group.metrics) return group
+  if (rows === group.rows && ratios === group.ratios && metrics === group.metrics) return group
   const next: BoardGroup = { ...group, rows }
+  if (ratios && ratios.length > 0) next.ratios = ratios
+  else delete next.ratios
   if (metrics) next.metrics = metrics
   else delete next.metrics
   return next
 }
 
-function insertRatioRows(group: BoardGroup): BoardRow[] {
-  let rows = group.rows
-  let changed = false
+function isRatioRow(row: BoardRow): boolean {
+  return RATIO_LINES.some((line) => row.measure === line.measure && row.cells[LABEL_COLUMN_ID] === line.name)
+}
+
+function buildRatios(group: BoardGroup, lifted: BoardRow[], fillMissing: boolean): BoardRow[] {
+  const found = new Map<string, BoardRow>()
+  for (const row of group.ratios ?? []) found.set(row.id, row)
+  for (const row of lifted) found.set(row.id, row)
+  const ratios: BoardRow[] = []
   for (const spec of RATIO_LINES) {
-    const id = `${group.id}-${spec.id}`
-    if (rows.some((row) => row.id === id)) continue
-    const previousId = previousRatioId(spec.id)
-    const previous = previousId ? rows.findIndex((row) => row.id === `${group.id}-${previousId}`) : -1
-    const at = previous === -1 ? statementEnd(rows) : previous + 1
-    const next = rows.slice()
-    next.splice(at, 0, ratioLine(group, spec))
-    rows = next
-    changed = true
+    const existing = found.get(`${group.id}-${spec.id}`)
+    if (existing) ratios.push(existing)
+    else if (fillMissing) ratios.push(ratioLine(group, spec))
   }
-  return changed ? rows : group.rows
-}
-
-function previousRatioId(id: string): string | undefined {
-  const index = RATIO_LINES.findIndex((line) => line.id === id)
-  return index > 0 ? RATIO_LINES[index - 1]?.id : undefined
-}
-
-function statementEnd(rows: BoardRow[]): number {
-  let at = 0
-  rows.forEach((row, index) => {
-    if (STATEMENT_LINES.has(row.cells[LABEL_COLUMN_ID] ?? "")) at = index + 1
-  })
-  return at
+  return ratios
 }
 
 function withoutRatioMetrics(metrics: Record<string, string> | undefined): Record<string, string> | undefined {
@@ -386,7 +377,7 @@ export function createSeedWorkspace(): Workspace {
         title: "YTD financial results",
         subtitle: "",
         aggregateRows: false,
-        ratioRows: true,
+        ratioTable: true,
         columns: YTD_COLUMNS,
         groups: PORTCOS.map((portco) => (portco.id === "improv" ? improvYtdGroup() : ytdGroup(portco))),
         kpis: [
@@ -548,8 +539,8 @@ function improvYtdGroup(): BoardGroup {
       closedMoneyRow("improv-gp", "Gross profit", gross, IMPROV_GROSS_EXPECTED),
       closedMoneyRow("improv-opex", "Operating expenses", opex, IMPROV_GROSS_EXPECTED - IMPROV_NET_EXPECTED),
       closedMoneyRow("improv-net-income", "Net income", net, IMPROV_NET_EXPECTED),
-      ...ratioLines("improv"),
     ],
+    ratios: firmRatioRows("improv"),
   }
 }
 
@@ -617,17 +608,20 @@ function firmRatioProblems(group: BoardGroup): string[] {
   const expected = firmMetricsFor(group.id)
   if (!expected) return [`Missing firm ratios for ${group.id}.`]
   const problems: string[] = []
-  const labels = group.rows.map((row) => row.cells[LABEL_COLUMN_ID])
-  const income = labels.findIndex((label) => label === "Net income" || label === "EBITDA")
+  if (group.rows.some(isRatioRow)) problems.push(`${group.id} ratios are still on the income statement.`)
   RATIO_LINES.forEach((line, offset) => {
-    const row = group.rows[income + 1 + offset]
+    const row = group.ratios?.[offset]
     if (!row || row.cells[LABEL_COLUMN_ID] !== line.name || row.measure !== line.measure) {
-      problems.push(`${group.id} ${line.name} is not under income.`)
+      problems.push(`${group.id} ${line.name} is missing from the ratio table.`)
       return
     }
     if (row.cells.ytd !== expected[line.id]) problems.push(`${group.id} ${line.id} YTD is ${row.cells.ytd ?? "missing"}.`)
   })
   return problems
+}
+
+export function firmRatioRows(groupId: string): BoardRow[] {
+  return ratioLines(groupId)
 }
 
 function ratioLines(groupId: string): BoardRow[] {
@@ -699,8 +693,8 @@ function ytdGroup(portco: PortcoSeed): BoardGroup {
       moneyRow(`${portco.id}-gp`, "Gross profit", gross, annualPlan(gross, portco.goalLift)),
       moneyRow(`${portco.id}-opex`, "Operating expenses", opex, annualPlan(opex, 1)),
       moneyRow(`${portco.id}-ebitda`, "EBITDA", ebitda, annualPlan(ebitda, portco.goalLift)),
-      ...ratioLines(portco.id),
     ],
+    ratios: firmRatioRows(portco.id),
   }
 }
 

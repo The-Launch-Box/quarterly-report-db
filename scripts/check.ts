@@ -518,11 +518,13 @@ const ratioNames = [
   "Revenue growth rate",
   "Working capital ratio",
 ]
-const improvLabels = improvGroup.rows.map((row) => row.cells[LABEL_COLUMN_ID])
-const incomeAt = improvLabels.indexOf("Net income")
+const improvRatioLabels = (improvGroup.ratios ?? []).map((row) => row.cells[LABEL_COLUMN_ID])
 ratioNames.forEach((name, offset) => {
-  if (improvLabels[incomeAt + 1 + offset] !== name) throw new Error(`${name} should follow income`)
+  if (improvRatioLabels[offset] !== name) throw new Error(`${name} should be in the ratio table`)
 })
+if (improvGroup.rows.some((row) => ratioNames.includes(row.cells[LABEL_COLUMN_ID] ?? ""))) {
+  throw new Error("ratios should stay off the income statement")
+}
 if (ytd.columns.some((column) => column.scope === "firm" || column.id === "gpm")) throw new Error("ratio columns should be gone")
 if (headcount.columns.some((column) => column.scope === "firm")) throw new Error("headcount should not carry firm ratios")
 if (defaultBarColumnIds(ytd).join() !== "q3,q4") throw new Error("firm ratios should stay off the default chart")
@@ -577,7 +579,7 @@ const allMargins = must(profitMarginChart(ytd, "all"), "all margins")
 if (allMargins.points.length !== ytd.groups.length) throw new Error("profit margins should include every firm")
 if (allMargins.netLabel !== "Profit margin") throw new Error("mixed profit lines need one series name")
 const grossMargin = must(
-  improvGroup.rows.find((row) => row.cells[LABEL_COLUMN_ID] === "Gross profit margin"),
+  improvGroup.ratios?.find((row) => row.cells[LABEL_COLUMN_ID] === "Gross profit margin"),
   "gross margin row",
 )
 if (grossMargin.measure !== "percent" || !grossMargin.omitFromRollup) throw new Error("gross margin should be a ratio row")
@@ -589,7 +591,7 @@ if (formatColumnValue({ id: "gpm", name: "Gross profit margin", kind: "percent",
   throw new Error("gross margin should display as a whole percent")
 }
 const workingCapital = must(
-  improvGroup.rows.find((row) => row.cells[LABEL_COLUMN_ID] === "Working capital ratio"),
+  improvGroup.ratios?.find((row) => row.cells[LABEL_COLUMN_ID] === "Working capital ratio"),
   "working capital row",
 )
 if (workingCapital.measure !== "number" || workingCapital.cells.ytd !== "0.75" || workingCapital.cells.q3 !== "1.38") {
@@ -602,15 +604,15 @@ if (formatColumnValue({ id: "wkr", name: "Working capital ratio", kind: "number"
   throw new Error("working capital should show two digits")
 }
 const echelonMargin = must(
-  echelon.rows.find((row) => row.cells[LABEL_COLUMN_ID] === "Gross profit margin"),
+  echelon.ratios?.find((row) => row.cells[LABEL_COLUMN_ID] === "Gross profit margin"),
   "echelon gross margin",
 )
 const echelonCapital = must(
-  echelon.rows.find((row) => row.cells[LABEL_COLUMN_ID] === "Working capital ratio"),
+  echelon.ratios?.find((row) => row.cells[LABEL_COLUMN_ID] === "Working capital ratio"),
   "echelon working capital",
 )
 if (echelonMargin.cells.ytd !== "0.58" || echelonCapital.cells.ytd !== "1.62") throw new Error("echelon starter ratios")
-if (!ytd.groups.every((group) => ratioNames.every((name) => group.rows.some((row) => row.cells[LABEL_COLUMN_ID] === name)))) {
+if (!ytd.groups.every((group) => ratioNames.every((name) => group.ratios?.some((row) => row.cells[LABEL_COLUMN_ID] === name)))) {
   throw new Error("every firm should have the six ratios")
 }
 if (uniqueLabels(ytd).some((label) => ratioNames.includes(label))) throw new Error("ratio rows should stay off the chart")
@@ -618,41 +620,57 @@ if (uniqueLabels(ytd).some((label) => ratioNames.includes(label))) throw new Err
 if (withFirmRatios(seed) !== seed) throw new Error("current firm ratios were rewritten")
 const legacyRatios = structuredClone(seed)
 const legacyYtd = must(legacyRatios.boards.find((board) => board.id === "ytd"), "legacy ytd")
-delete legacyYtd.ratioRows
-legacyYtd.firmRatios = true
-legacyYtd.columns = [
-  ...legacyYtd.columns,
-  { id: "gpm", name: "Gross profit margin", kind: "percent", scope: "firm", decimals: 0 },
-]
+delete legacyYtd.ratioTable
+legacyYtd.ratioRows = true
 for (const group of legacyYtd.groups) {
-  group.rows = group.rows.filter((row) => !row.measure)
-  group.metrics = { gpm: group.id === "improv" ? "0.41" : "0.58", nbtem: "" }
+  const moved = group.ratios ?? []
+  delete group.ratios
+  group.rows = [...group.rows, ...moved]
+  if (group.id === "improv") {
+    const margin = group.rows.find((row) => row.id === "improv-gpm")
+    const travel = group.rows.find((row) => row.id === "improv-nbtem")
+    if (margin) margin.cells = { ...margin.cells, ytd: "0.41" }
+    if (travel) travel.cells = { ...travel.cells, ytd: "" }
+  }
 }
 const restoredRatios = withFirmRatios(legacyRatios)
 const restoredYtd = must(restoredRatios.boards.find((board) => board.id === "ytd"), "restored ytd")
-if (!restoredYtd.ratioRows || restoredYtd.firmRatios) throw new Error("restored board kept the ratio columns")
-if (restoredYtd.columns.some((column) => column.id === "gpm" || column.scope === "firm")) {
-  throw new Error("restored ratios stayed columns")
-}
+if (!restoredYtd.ratioTable || restoredYtd.ratioRows) throw new Error("restored board kept ratios on the income statement")
 const restoredImprov = must(restoredYtd.groups.find((group) => group.id === "improv"), "restored improv")
-const restoredMargin = restoredImprov.rows.find((row) => row.id === "improv-gpm")
-const restoredTravel = restoredImprov.rows.find((row) => row.id === "improv-nbtem")
-const restoredCapital = restoredImprov.rows.find((row) => row.id === "improv-wkr")
+if (restoredImprov.rows.some((row) => row.measure)) throw new Error("restored ratios stayed on the income statement")
+const restoredMargin = restoredImprov.ratios?.find((row) => row.id === "improv-gpm")
+const restoredTravel = restoredImprov.ratios?.find((row) => row.id === "improv-nbtem")
+const restoredCapital = restoredImprov.ratios?.find((row) => row.id === "improv-wkr")
 if (restoredMargin?.cells.ytd !== "0.41" || restoredMargin.cells.q3 !== "0.41") throw new Error("saved gross margin was overwritten")
 if (restoredTravel?.cells.ytd) throw new Error("a cleared ratio was filled back in")
 if (restoredCapital?.cells.ytd !== "0.75") throw new Error("a missing ratio was not filled from the deck")
-if (restoredImprov.metrics) throw new Error("ratio values stayed on the firm header")
-const restoredLabels = restoredImprov.rows.map((row) => row.cells[LABEL_COLUMN_ID])
-const restoredIncome = restoredLabels.indexOf("Net income")
-if (restoredLabels[restoredIncome + 1] !== "Gross profit margin") throw new Error("restored ratios left income")
+if (restoredImprov.ratios?.[0]?.cells[LABEL_COLUMN_ID] !== "Gross profit margin") throw new Error("restored ratio table lost its order")
 if (withFirmRatios(restoredRatios) !== restoredRatios) throw new Error("restored ratios were rewritten")
+const editedRatio = reducer(seed, {
+  type: "set-cell",
+  boardId: "ytd",
+  groupId: "improv",
+  rowId: "improv-gpm",
+  columnId: "ytd",
+  value: "0.4",
+})
+if (editedRatio.boards.find((board) => board.id === "ytd")?.groups.find((group) => group.id === "improv")?.ratios?.find((row) => row.id === "improv-gpm")?.cells.ytd !== "0.4") {
+  throw new Error("a ratio YTD edit did not save")
+}
+const addedFirm = reducer(seed, { type: "add-company", name: "Northwind Ratios" })
+const addedYtd = must(addedFirm.boards.find((board) => board.id === "ytd"), "ytd with a new firm")
+const addedGroup = must(addedYtd.groups.find((group) => group.name === "Northwind Ratios"), "new firm")
+if (addedGroup.ratios?.length !== ratioNames.length) throw new Error("a new firm did not get a ratio table")
+if (addedFirm.boards.find((board) => board.id === "headcount")?.groups.find((group) => group.name === "Northwind Ratios")?.ratios) {
+  throw new Error("headcount received a ratio table")
+}
 
 const droppedRatios = structuredClone(seed)
 const droppedImprov = must(
   droppedRatios.boards.find((board) => board.id === "ytd")?.groups.find((group) => group.id === "improv"),
   "dropped improv",
 )
-droppedImprov.rows = droppedImprov.rows.filter((row) => row.id !== "improv-gpm")
+droppedImprov.ratios = droppedImprov.ratios?.filter((row) => row.id !== "improv-gpm")
 if (withFirmRatios(droppedRatios) !== droppedRatios) throw new Error("a deleted ratio row was put back")
 
 const improvHeads = computeKpis(headcount, "improv").find((kpi) => kpi.id === "q3-heads")
@@ -682,14 +700,14 @@ const roundTrip = must(parseWorkspace(JSON.parse(JSON.stringify(seed)) as unknow
 const roundNote = roundTrip.boards.find((board) => board.id === "ytd")?.groups.find((group) => group.id === "improv")?.operatingResults
 if (roundNote !== IMPROV_OPERATING_RESULTS) throw new Error("operating results dropped on save")
 const roundYtd = must(roundTrip.boards.find((board) => board.id === "ytd"), "round trip ytd")
-if (!roundYtd.ratioRows) throw new Error("ratio rows flag dropped on save")
+if (!roundYtd.ratioTable) throw new Error("ratio table flag dropped on save")
 const roundMargin = roundYtd.groups
   .find((group) => group.id === "improv")
-  ?.rows.find((row) => row.id === "improv-gpm")
+  ?.ratios?.find((row) => row.id === "improv-gpm")
 if (roundMargin?.measure !== "percent" || roundMargin.cells.ytd !== "0.38") throw new Error("gross margin row dropped on save")
 const roundCapital = roundYtd.groups
   .find((group) => group.id === "improv")
-  ?.rows.find((row) => row.id === "improv-wkr")
+  ?.ratios?.find((row) => row.id === "improv-wkr")
 if (roundCapital?.measure !== "number" || roundCapital.cells.ytd !== "0.75") throw new Error("working capital row dropped on save")
 const corruptRatios = JSON.parse(JSON.stringify(seed)) as { boards: { groups: { metrics?: Record<string, unknown> }[] }[] }
 const corruptGroup = corruptRatios.boards[0]?.groups[0]

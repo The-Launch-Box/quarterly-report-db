@@ -1,4 +1,5 @@
 import { listCompanies } from "./metrics"
+import { firmRatioRows } from "./seed"
 import {
   LABEL_COLUMN_ID,
   MAX_COLUMN_WIDTH,
@@ -45,14 +46,22 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
       return mapBoard(workspace, action.boardId, (board) => {
         const group = board.groups.find((item) => item.id === action.groupId)
         const column = (group ? tableColumns(board, group) : board.columns).find((item) => item.id === action.columnId)
-        if (!column || column.formula || column.scope === "firm") return board
+        const ratio = group?.ratios?.find((row) => row.id === action.rowId)
+        if (!column || column.scope === "firm") return board
+        if (column.formula && !ratio?.measure) return board
         return {
           ...board,
-          groups: board.groups.map((group) => {
-            if (group.id !== action.groupId) return group
+          groups: board.groups.map((item) => {
+            if (item.id !== action.groupId) return item
+            if (item.ratios?.some((row) => row.id === action.rowId)) {
+              return {
+                ...item,
+                ratios: item.ratios.map((row) => writeCell(row, action.rowId, action.columnId, action.value)),
+              }
+            }
             return {
-              ...group,
-              rows: group.rows.map((row) => writeCell(row, action.rowId, action.columnId, action.value)),
+              ...item,
+              rows: item.rows.map((row) => writeCell(row, action.rowId, action.columnId, action.value)),
             }
           }),
         }
@@ -232,7 +241,12 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
                 ...board,
                 groups: [
                   ...board.groups,
-                  { id: groupId, name, rows: [{ id: crypto.randomUUID(), cells: { [LABEL_COLUMN_ID]: "New line" } }] },
+                  {
+                    id: groupId,
+                    name,
+                    rows: [{ id: crypto.randomUUID(), cells: { [LABEL_COLUMN_ID]: "New line" } }],
+                    ...(board.id === "ytd" ? { ratios: firmRatioRows(groupId) } : {}),
+                  },
                 ],
               },
         ),

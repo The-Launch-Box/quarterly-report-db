@@ -62,6 +62,7 @@ function readBoard(value: unknown): Board | null {
     columns,
     groups,
     kpis,
+    ...(value.ratioTable === true ? { ratioTable: true as const } : {}),
     ...(value.ratioRows === true ? { ratioRows: true as const } : {}),
     ...(value.firmRatios === true ? { firmRatios: true as const } : {}),
     ...(typeof value.firmId === "string" ? { firmId: value.firmId.trim() } : {}),
@@ -133,6 +134,16 @@ function readGroup(value: unknown): BoardGroup | null {
     const metrics = readCells(value.metrics)
     if (!metrics) return null
     group.metrics = metrics
+  }
+  if (value.ratios !== undefined) {
+    if (!Array.isArray(value.ratios)) return null
+    const ratios: BoardRow[] = []
+    for (const entry of value.ratios) {
+      const row = readRow(entry, false)
+      if (!row) return null
+      ratios.push(row)
+    }
+    if (ratios.length > 0) group.ratios = ratios
   }
   return group
 }

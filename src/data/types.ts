@@ -80,7 +80,9 @@ export interface BoardGroup {
   columns?: Column[]
   /** Commentary on the YTD board. Plain text, or a small set of formatted HTML. */
   operatingResults?: string
-  /** Firm-level ratios, keyed by column id. Shared by every line in the firm. */
+  /** The firm's ratio table. Kept apart from the income-statement lines. */
+  ratios?: BoardRow[]
+  /** Firm-level ratios, keyed by column id. Older saves used this; the ratio table replaces it. */
   metrics?: Record<string, string>
 }
 
@@ -104,9 +106,11 @@ export interface Board {
   columns: Column[]
   groups: BoardGroup[]
   kpis: KpiDef[]
-  /** YTD ratio rows were added under income. A later delete of one of those rows stays deleted. */
+  /** Each firm on YTD has its ratio table. A later delete of one of those rows stays deleted. */
+  ratioTable?: boolean
+  /** The ratios were briefly stored as income-statement rows. Those saves still load, then move into the table. */
   ratioRows?: boolean
-  /** Older saves stored the ratios as columns. Those saves still load, then the rows replace the columns. */
+  /** Older saves stored the ratios as columns. Those saves still load, then the table replaces the columns. */
   firmRatios?: boolean
   /** Set on a board created for one firm. Portfolio boards leave this unset. */
   firmId?: string
