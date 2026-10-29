@@ -1,11 +1,11 @@
 import { Fragment, useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router"
-import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react"
+import { BarChart3, ChevronDown, ChevronRight, Columns2, Plus, Table2, Trash2 } from "lucide-react"
 
 import { EditableCell } from "@/components/board-table"
 import { FirmChart } from "@/components/firm-chart"
 import { ColumnResizeHandle, resizeCeiling, storedColumnWidth, tablePixelWidth, useColumnWidths, useFrameWidth } from "@/components/column-resize"
-import { Button, ConfirmDialog, Field, Input, Modal, Select } from "@/components/ui"
+import { Button, ConfirmDialog, Field, Input, Modal, Segmented, Select } from "@/components/ui"
 import { listCompanies } from "@/data/metrics"
 import { useWorkspace } from "@/data/store"
 import { LABEL_COLUMN_ID, type BoardGroup, type BoardRow, type Column, type ColumnKind } from "@/data/types"
@@ -25,6 +25,8 @@ type Pending =
   | { kind: "table"; id: string; name: string }
   | null
 
+type ViewMode = "split" | "table" | "chart"
+
 export function CustomBoardScreen({ boardId }: { boardId: string }) {
   const { workspace, dispatch, canEdit } = useWorkspace()
   const navigate = useNavigate()
@@ -32,6 +34,7 @@ export function CustomBoardScreen({ boardId }: { boardId: string }) {
   const [columnGroupId, setColumnGroupId] = useState<string | null>(null)
   const [tableOpen, setTableOpen] = useState(false)
   const [pending, setPending] = useState<Pending>(null)
+  const [view, setView] = useState<ViewMode>("split")
   const [flash, setFlash] = useState<{ rowId: string; token: number } | null>(null)
   const flashCount = useRef(0)
   if (!board?.firmId) return null
@@ -89,38 +92,54 @@ export function CustomBoardScreen({ boardId }: { boardId: string }) {
         ) : null}
       </header>
 
-      <div className="space-y-8">
-        {board.groups.map((group) => (
-          <FirmTable
-            key={group.id}
-            boardTitle={board.title}
-            group={group}
-            columns={group.columns ?? board.columns}
-            canEdit={canEdit}
-            canDelete={board.groups.length > 1}
-            flash={flash}
-            onCommit={(rowId, columnId, value, previous) => commitCell(group.id, rowId, columnId, value, previous)}
-            onAddRow={() => dispatch({ type: "add-row", boardId, groupId: group.id })}
-            onAddColumn={() => setColumnGroupId(group.id)}
-            onRename={(title) => dispatch({ type: "rename-table", boardId, groupId: group.id, title })}
-            onRenameColumn={(columnId, name) =>
-              dispatch({ type: "rename-column", boardId, groupId: group.id, columnId, name })
-            }
-            onResizeColumn={(columnId, width) =>
-              dispatch({ type: "set-column-width", boardId, groupId: group.id, columnId, width })
-            }
-            onDeleteColumn={(id, name) => setPending({ kind: "column", groupId: group.id, id, name })}
-            onDeleteRow={(rowId) => dispatch({ type: "delete-row", boardId, groupId: group.id, rowId })}
-            onAddSubrow={(rowId) => dispatch({ type: "add-subrow", boardId, groupId: group.id, rowId })}
-            onDeleteSubrow={(rowId, subrowId) =>
-              dispatch({ type: "delete-subrow", boardId, groupId: group.id, rowId, subrowId })
-            }
-            onDelete={() => setPending({ kind: "table", id: group.id, name: group.name })}
-          />
-        ))}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <p className="text-[11px] uppercase tracking-widest text-muted-foreground">View</p>
+        <Segmented
+          label="View"
+          value={view}
+          onChange={setView}
+          options={[
+            { value: "split", label: "Split", icon: Columns2 },
+            { value: "table", label: "Table", icon: Table2 },
+            { value: "chart", label: "Graph", icon: BarChart3 },
+          ]}
+        />
       </div>
 
-      <FirmChart board={board} />
+      {view === "chart" ? null : (
+        <div className="space-y-8">
+          {board.groups.map((group) => (
+            <FirmTable
+              key={group.id}
+              boardTitle={board.title}
+              group={group}
+              columns={group.columns ?? board.columns}
+              canEdit={canEdit}
+              canDelete={board.groups.length > 1}
+              flash={flash}
+              onCommit={(rowId, columnId, value, previous) => commitCell(group.id, rowId, columnId, value, previous)}
+              onAddRow={() => dispatch({ type: "add-row", boardId, groupId: group.id })}
+              onAddColumn={() => setColumnGroupId(group.id)}
+              onRename={(title) => dispatch({ type: "rename-table", boardId, groupId: group.id, title })}
+              onRenameColumn={(columnId, name) =>
+                dispatch({ type: "rename-column", boardId, groupId: group.id, columnId, name })
+              }
+              onResizeColumn={(columnId, width) =>
+                dispatch({ type: "set-column-width", boardId, groupId: group.id, columnId, width })
+              }
+              onDeleteColumn={(id, name) => setPending({ kind: "column", groupId: group.id, id, name })}
+              onDeleteRow={(rowId) => dispatch({ type: "delete-row", boardId, groupId: group.id, rowId })}
+              onAddSubrow={(rowId) => dispatch({ type: "add-subrow", boardId, groupId: group.id, rowId })}
+              onDeleteSubrow={(rowId, subrowId) =>
+                dispatch({ type: "delete-subrow", boardId, groupId: group.id, rowId, subrowId })
+              }
+              onDelete={() => setPending({ kind: "table", id: group.id, name: group.name })}
+            />
+          ))}
+        </div>
+      )}
+
+      {view === "table" ? null : <FirmChart board={board} />}
 
       <AddColumnDialog
         boardId={board.id}
