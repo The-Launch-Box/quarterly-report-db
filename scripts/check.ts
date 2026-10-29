@@ -4,7 +4,7 @@ import path from "node:path"
 
 import { isAdminEmail, isLaunchboxEmail, launchboxEmailFromClaims } from "../src/auth/access"
 import { resizeCeiling } from "../src/components/column-resize"
-import { firmTableMarks, trendSegment } from "../src/data/firm-chart"
+import { firmTableMarks, trendSegment, trendValue } from "../src/data/firm-chart"
 import { formatCurrency, parseNumber, parsePercentInput } from "../src/data/format"
 import { isExpired, SNAPSHOT_TTL_MS } from "../src/data/retention"
 import { publishWorkspace, readLiveSnapshot, saveSnapshot } from "../server/snapshots"
@@ -903,6 +903,9 @@ const rising = trendSegment([
   { x: 2, y: 5 },
 ])
 if (!rising || rising[0].y !== 1 || rising[1].y !== 5) throw new Error("trendline was not a straight fit")
+const midway = trendValue(rising, 0.5)
+if (midway.x !== 1 || midway.y !== 3) throw new Error("trendline midpoint was not the expected value")
+if (trendValue(rising, 2).y !== 5) throw new Error("trendline hover ran past the line")
 if (trendSegment([{ x: 1, y: 1 }]) !== null) throw new Error("one point drew a trendline")
 if (trendSegment([{ x: 1, y: 1 }, { x: 1, y: 4 }]) !== null) throw new Error("a vertical cloud drew a trendline")
 

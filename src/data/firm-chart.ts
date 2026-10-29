@@ -61,6 +61,17 @@ export function trendSegment(points: TrendPoint[]): [TrendPoint, TrendPoint] | n
   ]
 }
 
+/** Value on the fitted line. `t` is 0 at the left end and 1 at the right end. */
+export function trendValue(segment: readonly [TrendPoint, TrendPoint], t: number): TrendPoint {
+  const start = segment[0]
+  const end = segment[1]
+  const clamped = Math.min(1, Math.max(0, t))
+  return {
+    x: start.x + clamped * (end.x - start.x),
+    y: start.y + clamped * (end.y - start.y),
+  }
+}
+
 function pushMark(marks: FirmMark[], tableId: string, row: BoardRow, columns: Column[], label: string) {
   const values: Record<string, number | null> = {}
   let any = false

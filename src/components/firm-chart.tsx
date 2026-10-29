@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useRef, useState, type MouseEvent as ReactMouseEvent } from "react"
 import { BarChart3, PieChart as PieIcon, ScatterChart as ScatterIcon } from "lucide-react"
 import {
   Bar,
@@ -17,7 +17,7 @@ import {
 } from "recharts"
 
 import { formatColumnValue, isValueColumn } from "@/data/metrics"
-import { firmTableMarks, tableColumns, trendSegment, type FirmMark } from "@/data/firm-chart"
+import { firmTableMarks, tableColumns, trendSegment, trendValue, type FirmMark } from "@/data/firm-chart"
 import { formatNumber, shortName } from "@/data/format"
 import type { Board, BoardGroup, Column, ColumnKind } from "@/data/types"
 import { Field, Segmented, Select } from "@/components/ui"
@@ -315,6 +315,8 @@ function FirmPie({ many, prepared }: { many: boolean; prepared: Prepared[] }) {
 }
 
 function FirmScatter({ trend, prepared }: { trend: boolean; prepared: Prepared[] }) {
+  const frame = useRef<HTMLDivElement>(null)
+  const [trendHover, setTrendHover] = useState<{ x: number; y: number; left: number; top: number } | null>(null)
   const clouds = prepared.flatMap((item) => {
     const xColumn = item.numeric.find((entry) => entry.id === item.axes.x)
     const yColumn = item.numeric.find((entry) => entry.id === item.axes.y)
@@ -333,7 +335,20 @@ function FirmScatter({ trend, prepared }: { trend: boolean; prepared: Prepared[]
   const yKind = sharedKind(clouds.map((cloud) => cloud.yColumn.kind))
   const trendPoints = trend ? trendSegment(clouds.flatMap((cloud) => cloud.points)) : null
 
+  function showTrend(t: number, clientX: number, clientY: number) {
+    const node = frame.current
+    if (!node || !trendPoints) return
+    const bounds = node.getBoundingClientRect()
+    const expected = trendValue(trendPoints, t)
+    let left = clientX - bounds.left + 12
+    let top = clientY - bounds.top + 12
+    if (left > bounds.width - 196) left = clientX - bounds.left - 196
+    if (top > bounds.height - 78) top = clientY - bounds.top - 78
+    setTrendHover({ x: expected.x, y: expected.y, left: Math.max(8, left), top: Math.max(8, top) })
+  }
+
   return (
+    <div ref={frame} className="relative h-full w-full">
     <ResponsiveContainer width="100%" height="100%">
       <ScatterChart margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
         <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
@@ -363,7 +378,9 @@ function FirmScatter({ trend, prepared }: { trend: boolean; prepared: Prepared[]
           <Scatter
             name="Trendline"
             data={trendPoints}
-            line={{ stroke: "var(--color-foreground)", strokeWidth: 2 }}
+            line={(props: { points?: PixelPoint[] }) => (
+              <TrendStroke points={props.points} onMove={showTrend} onLeave={() => setTrendHover(null)} />
+            )}
             shape={HiddenDot}
             legendType="line"
             fill="var(--color-foreground)"
@@ -371,6 +388,27 @@ function FirmScatter({ trend, prepared }: { trend: boolean; prepared: Prepared[]
         ) : null}
       </ScatterChart>
     </ResponsiveContainer>
+    {trendHover ? (
+      <div
+        className="pointer-events-none absolute z-20 rounded-md border border-border bg-background px-3 py-2 font-mono"
+        style={{ left: trendHover.left, top: trendHover.top }}
+      >
+        <div className="mb-1 text-[11px] text-muted-foreground">Trendline</div>
+        <div className="text-xs text-muted-foreground">
+          {axisName(clouds.map((cloud) => cloud.xColumn))}:{" "}
+          <span className="font-semibold text-foreground">
+            {formatShared(clouds.map((cloud) => cloud.xColumn), xKind, trendHover.x)}
+          </span>
+        </div>
+        <div className="text-xs text-muted-foreground">
+          Expected {axisName(clouds.map((cloud) => cloud.yColumn))}:{" "}
+          <span className="font-semibold text-foreground">
+            {formatShared(clouds.map((cloud) => cloud.yColumn), yKind, trendHover.y)}
+          </span>
+        </div>
+      </div>
+    ) : null}
+    </div>
   )
 }
 
@@ -518,6 +556,76 @@ function ScatterTip({
       </div>
     </div>
   )
+}
+
+interface PixelPoint {
+  x: number
+  y: number
+}
+
+function TrendStroke({
+  points,
+  onMove,
+  onLeave,
+}: {
+  points?: PixelPoint[]
+  onMove: (t: number, clientX: number, clientY: number) => void
+  onLeave: () => void
+}) {
+  const start = points?.[0]
+  const end = points?.[1]
+  if (!start || !end) return null
+  const d = `M ${start.x} ${start.y} L ${end.x} ${end.y}`
+  return (
+    <g>
+      <path
+        d={d}
+        fill="none"
+        stroke="transparent"
+        strokeWidth={14}
+        strokeLinecap="round"
+        style={{ cursor: "crosshair" }}
+        onMouseMove={(event) => {
+          const local = pointerInSvg(event)
+          if (!local) return
+          onMove(segmentT(local, start, end), event.clientX, event.clientY)
+        }}
+        onMouseLeave={onLeave}
+      />
+      <path d={d} fill="none" stroke="var(--color-foreground)" strokeWidth={2} pointerEvents="none" />
+    </g>
+  )
+}
+
+function pointerInSvg(event: ReactMouseEvent<SVGPathElement>): PixelPoint | null {
+  const svg = event.currentTarget.ownerSVGElement
+  const matrix = svg?.getScreenCTM()
+  if (!svg || !matrix) return null
+  const point = svg.createSVGPoint()
+  point.x = event.clientX
+  point.y = event.clientY
+  const local = point.matrixTransform(matrix.inverse())
+  return { x: local.x, y: local.y }
+}
+
+function segmentT(point: PixelPoint, start: PixelPoint, end: PixelPoint): number {
+  const dx = end.x - start.x
+  const dy = end.y - start.y
+  const length = dx * dx + dy * dy
+  if (length === 0) return 0
+  return Math.min(1, Math.max(0, ((point.x - start.x) * dx + (point.y - start.y) * dy) / length))
+}
+
+function axisName(columns: Column[]): string {
+  const first = columns[0]
+  if (!first) return "Value"
+  return columns.every((column) => column.name === first.name) ? first.name : "Value"
+}
+
+function formatShared(columns: Column[], kind: ColumnKind, value: number): string {
+  const first = columns[0]
+  if (first && columns.every((column) => column.kind === first.kind)) return formatColumnValue(first, value)
+  return axisTick(kind, value)
 }
 
 function HiddenDot() {
