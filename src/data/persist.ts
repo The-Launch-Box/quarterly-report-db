@@ -106,7 +106,7 @@ function readGroup(value: unknown): BoardGroup | null {
   }
   const rows: BoardRow[] = []
   for (const entry of value.rows) {
-    const row = readRow(entry)
+    const row = readRow(entry, false)
     if (!row) return null
     rows.push(row)
   }
@@ -136,13 +136,23 @@ function readGroup(value: unknown): BoardGroup | null {
   return group
 }
 
-function readRow(value: unknown): BoardRow | null {
+function readRow(value: unknown, nested: boolean): BoardRow | null {
   if (!isRecord(value) || typeof value.id !== "string") return null
   const cells = readCells(value.cells)
   if (!cells) return null
   if (value.omitFromRollup !== undefined && value.omitFromRollup !== true) return null
   const row: BoardRow = { id: value.id, cells }
   if (value.omitFromRollup === true) row.omitFromRollup = true
+  if (value.subrows !== undefined) {
+    if (nested || !Array.isArray(value.subrows)) return null
+    const subrows: BoardRow[] = []
+    for (const entry of value.subrows) {
+      const subrow = readRow(entry, true)
+      if (!subrow) return null
+      subrows.push(subrow)
+    }
+    if (subrows.length > 0) row.subrows = subrows
+  }
   return row
 }
 

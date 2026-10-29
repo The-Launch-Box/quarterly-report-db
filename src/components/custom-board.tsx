@@ -1,13 +1,13 @@
-import { useEffect, useRef, useState } from "react"
+import { Fragment, useEffect, useRef, useState } from "react"
 import { useNavigate } from "react-router"
-import { Plus, Trash2 } from "lucide-react"
+import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react"
 
 import { EditableCell } from "@/components/board-table"
 import { ColumnResizeHandle, tablePixelWidth, useColumnWidths } from "@/components/column-resize"
 import { Button, ConfirmDialog, Field, Input, Modal, Select } from "@/components/ui"
 import { listCompanies } from "@/data/metrics"
 import { useWorkspace } from "@/data/store"
-import { LABEL_COLUMN_ID, type BoardGroup, type Column, type ColumnKind } from "@/data/types"
+import { LABEL_COLUMN_ID, type BoardGroup, type BoardRow, type Column, type ColumnKind } from "@/data/types"
 import { cn } from "@/lib/cn"
 
 const COLUMN_KINDS: { value: ColumnKind; label: string }[] = [
@@ -110,6 +110,10 @@ export function CustomBoardScreen({ boardId }: { boardId: string }) {
             }
             onDeleteColumn={(id, name) => setPending({ kind: "column", groupId: group.id, id, name })}
             onDeleteRow={(rowId) => dispatch({ type: "delete-row", boardId, groupId: group.id, rowId })}
+            onAddSubrow={(rowId) => dispatch({ type: "add-subrow", boardId, groupId: group.id, rowId })}
+            onDeleteSubrow={(rowId, subrowId) =>
+              dispatch({ type: "delete-subrow", boardId, groupId: group.id, rowId, subrowId })
+            }
             onDelete={() => setPending({ kind: "table", id: group.id, name: group.name })}
           />
         ))}
@@ -171,6 +175,8 @@ function FirmTable({
   onResizeColumn,
   onDeleteColumn,
   onDeleteRow,
+  onAddSubrow,
+  onDeleteSubrow,
   onDelete,
 }: {
   boardTitle: string
@@ -187,10 +193,111 @@ function FirmTable({
   onResizeColumn: (columnId: string, width: number) => void
   onDeleteColumn: (columnId: string, name: string) => void
   onDeleteRow: (rowId: string) => void
+  onAddSubrow: (rowId: string) => void
+  onDeleteSubrow: (rowId: string, subrowId: string) => void
   onDelete: () => void
 }) {
   const { widthOf, onPointerDown } = useColumnWidths(onResizeColumn)
   const tableWidth = tablePixelWidth(columns, canEdit, widthOf)
+  const [openRows, setOpenRows] = useState<ReadonlySet<string>>(() => new Set())
+
+  function toggleRow(rowId: string) {
+    setOpenRows((current) => {
+      const next = new Set(current)
+      if (next.has(rowId)) next.delete(rowId)
+      else next.add(rowId)
+      return next
+    })
+  }
+
+  function addSubrow(rowId: string) {
+    setOpenRows((current) => {
+      const next = new Set(current)
+      next.add(rowId)
+      return next
+    })
+    onAddSubrow(rowId)
+  }
+
+  function renderGridRow(row: BoardRow, parent: BoardRow | null) {
+    const rowLabel = row.cells[LABEL_COLUMN_ID]?.trim() || "untitled"
+    const token = flash?.rowId === row.id ? flash.token : null
+    const nested = parent !== null
+    const subrows = row.subrows ?? []
+    const expanded = !nested && openRows.has(row.id) && subrows.length > 0
+    return (
+      <tr key={row.id} className="group">
+        {columns.map((column) => {
+          const previous = row.cells[column.id] ?? ""
+          return (
+            <td
+              key={column.id}
+              className={cn(
+                "relative overflow-hidden border-b border-border-soft px-1 py-1 group-hover:bg-bg-raised",
+                nested ? "bg-bg-raised" : "bg-card",
+                column.id === LABEL_COLUMN_ID && "sticky left-0 z-10 border-r border-border-soft",
+              )}
+            >
+              {token !== null ? <span key={token} className="cell-flash pointer-events-none absolute inset-0" /> : null}
+              {column.id === LABEL_COLUMN_ID ? (
+                <div className={cn("flex items-center", nested && "pl-6")}>
+                  {nested ? null : subrows.length > 0 ? (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-expanded={expanded}
+                      aria-label={`${expanded ? "Collapse" : "Expand"} sub-rows for ${rowLabel}`}
+                      onClick={() => toggleRow(row.id)}
+                    >
+                      {expanded ? <ChevronDown /> : <ChevronRight />}
+                    </Button>
+                  ) : (
+                    <span className="inline-block w-8 shrink-0" aria-hidden="true" />
+                  )}
+                  <div className="min-w-0 flex-1">
+                    <EditableCell
+                      column={column}
+                      columns={columns}
+                      row={row}
+                      raw={previous}
+                      editable={canEdit}
+                      placeholder={column.kind === "text" ? "Title" : undefined}
+                      ariaLabel={`${column.name} for ${rowLabel}`}
+                      onCommit={(value) => onCommit(row.id, column.id, value, previous)}
+                    />
+                  </div>
+                </div>
+              ) : (
+                <EditableCell
+                  column={column}
+                  columns={columns}
+                  row={row}
+                  raw={previous}
+                  editable={canEdit}
+                  placeholder={column.kind === "text" ? "Title" : undefined}
+                  ariaLabel={`${column.name} for ${rowLabel}`}
+                  onCommit={(value) => onCommit(row.id, column.id, value, previous)}
+                />
+              )}
+            </td>
+          )
+        })}
+        {canEdit ? (
+          <td className={cn("border-b border-border-soft px-1 group-hover:bg-bg-raised", nested ? "bg-bg-raised" : "bg-card")}>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="opacity-40 group-hover:opacity-100 focus-visible:opacity-100"
+              aria-label={`Delete ${rowLabel}`}
+              onClick={() => (parent ? onDeleteSubrow(parent.id, row.id) : onDeleteRow(row.id))}
+            >
+              <Trash2 />
+            </Button>
+          </td>
+        ) : null}
+      </tr>
+    )
+  }
 
   return (
     <section className="space-y-3">
@@ -273,48 +380,23 @@ function FirmTable({
           </thead>
           <tbody>
             {group.rows.map((row) => {
-              const rowLabel = row.cells[LABEL_COLUMN_ID]?.trim() || "untitled"
-              const token = flash?.rowId === row.id ? flash.token : null
+              const subrows = row.subrows ?? []
+              const expanded = openRows.has(row.id) && subrows.length > 0
               return (
-                <tr key={row.id} className="group">
-                  {columns.map((column) => {
-                    const previous = row.cells[column.id] ?? ""
-                    return (
-                      <td
-                        key={column.id}
-                        className={cn(
-                          "relative overflow-hidden border-b border-border-soft bg-card px-1 py-1 group-hover:bg-bg-raised",
-                          column.id === LABEL_COLUMN_ID && "sticky left-0 z-10 border-r border-border-soft",
-                        )}
-                      >
-                        {token !== null ? <span key={token} className="cell-flash pointer-events-none absolute inset-0" /> : null}
-                        <EditableCell
-                          column={column}
-                          columns={columns}
-                          row={row}
-                          raw={previous}
-                          editable={canEdit}
-                          placeholder={column.kind === "text" ? "Title" : undefined}
-                          ariaLabel={`${column.name} for ${rowLabel}`}
-                          onCommit={(value) => onCommit(row.id, column.id, value, previous)}
-                        />
-                      </td>
-                    )
-                  })}
+                <Fragment key={row.id}>
+                  {renderGridRow(row, null)}
+                  {expanded ? subrows.map((subrow) => renderGridRow(subrow, row)) : null}
                   {canEdit ? (
-                    <td className="border-b border-border-soft bg-card px-1 group-hover:bg-bg-raised">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="opacity-40 group-hover:opacity-100 focus-visible:opacity-100"
-                        aria-label={`Delete ${rowLabel}`}
-                        onClick={() => onDeleteRow(row.id)}
-                      >
-                        <Trash2 />
-                      </Button>
-                    </td>
+                    <tr>
+                      <td colSpan={columns.length + 1} className="border-b border-border-soft px-2 py-0.5">
+                        <Button variant="ghost" size="sm" className="pl-8 text-muted-foreground" onClick={() => addSubrow(row.id)}>
+                          <Plus />
+                          Add sub-row
+                        </Button>
+                      </td>
+                    </tr>
                   ) : null}
-                </tr>
+                </Fragment>
               )
             })}
             {canEdit ? (

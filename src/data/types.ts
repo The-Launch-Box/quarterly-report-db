@@ -55,6 +55,8 @@ export interface BoardRow {
   cells: Record<string, string>
   /** Leave this row out of company sums, portfolio totals, and KPI rollups. */
   omitFromRollup?: boolean
+  /** One level of nested rows on a firm board. Hidden until that row is expanded. */
+  subrows?: BoardRow[]
 }
 
 export interface BoardGroup {

@@ -16,7 +16,9 @@ const RESERVED_BOARD_IDS = new Set(["ytd", "headcount", "revenue"])
 export type WorkspaceAction =
   | { type: "set-cell"; boardId: string; groupId: string; rowId: string; columnId: string; value: string }
   | { type: "add-row"; boardId: string; groupId: string }
+  | { type: "add-subrow"; boardId: string; groupId: string; rowId: string }
   | { type: "delete-row"; boardId: string; groupId: string; rowId: string }
+  | { type: "delete-subrow"; boardId: string; groupId: string; rowId: string; subrowId: string }
   | { type: "add-column"; boardId: string; groupId?: string; name: string; kind: ColumnKind }
   | { type: "rename-column"; boardId: string; groupId?: string; columnId: string; name: string }
   | { type: "delete-column"; boardId: string; groupId?: string; columnId: string }
@@ -48,10 +50,7 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
             if (group.id !== action.groupId) return group
             return {
               ...group,
-              rows: group.rows.map((row) => {
-                if (row.id !== action.rowId) return row
-                return { ...row, cells: { ...row.cells, [action.columnId]: action.value } }
-              }),
+              rows: group.rows.map((row) => writeCell(row, action.rowId, action.columnId, action.value)),
             }
           }),
         }
@@ -68,6 +67,24 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
             : group,
         ),
       }))
+    case "add-subrow": {
+      const board = workspace.boards.find((item) => item.id === action.boardId)
+      const group = board?.groups.find((item) => item.id === action.groupId)
+      if (!board?.firmId || !group?.rows.some((row) => row.id === action.rowId)) return workspace
+      return mapBoard(workspace, action.boardId, (current) => ({
+        ...current,
+        groups: current.groups.map((item) =>
+          item.id === action.groupId
+            ? {
+                ...item,
+                rows: item.rows.map((row) =>
+                  row.id === action.rowId ? { ...row, subrows: [...(row.subrows ?? []), blankItem()] } : row,
+                ),
+              }
+            : item,
+        ),
+      }))
+    }
     case "delete-row":
       return mapBoard(workspace, action.boardId, (board) => ({
         ...board,
@@ -75,6 +92,32 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
           group.id === action.groupId ? { ...group, rows: group.rows.filter((row) => row.id !== action.rowId) } : group,
         ),
       }))
+    case "delete-subrow": {
+      const board = workspace.boards.find((item) => item.id === action.boardId)
+      const row = board?.groups
+        .find((item) => item.id === action.groupId)
+        ?.rows.find((item) => item.id === action.rowId)
+      if (!board?.firmId || !row?.subrows?.some((item) => item.id === action.subrowId)) return workspace
+      return mapBoard(workspace, action.boardId, (current) => ({
+        ...current,
+        groups: current.groups.map((group) => {
+          if (group.id !== action.groupId) return group
+          return {
+            ...group,
+            rows: group.rows.map((item) => {
+              if (item.id !== action.rowId || !item.subrows) return item
+              const subrows = item.subrows.filter((sub) => sub.id !== action.subrowId)
+              if (subrows.length === 0) {
+                const next = { ...item }
+                delete next.subrows
+                return next
+              }
+              return { ...item, subrows }
+            }),
+          }
+        }),
+      }))
+    }
     case "add-column": {
       const name = action.name.trim()
       if (!name) return workspace
@@ -145,7 +188,7 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
             const next = stripColumn(column, action.columnId)
             return next ? [next] : []
           }),
-          rows: group.rows.map((row) => ({ ...row, cells: withoutCell(row.cells, action.columnId) })),
+          rows: group.rows.map((row) => stripRowCells(row, action.columnId)),
         }))
       })
     case "add-table": {
@@ -313,6 +356,21 @@ function blankItem(): BoardRow {
   return { id: crypto.randomUUID(), cells: { [LABEL_COLUMN_ID]: "" } }
 }
 
+function writeCell(row: BoardRow, rowId: string, columnId: string, value: string): BoardRow {
+  if (row.id === rowId) return { ...row, cells: { ...row.cells, [columnId]: value } }
+  if (!row.subrows?.some((item) => item.id === rowId)) return row
+  return {
+    ...row,
+    subrows: row.subrows.map((item) => (item.id === rowId ? { ...item, cells: { ...item.cells, [columnId]: value } } : item)),
+  }
+}
+
+function stripRowCells(row: BoardRow, columnId: string): BoardRow {
+  const next: BoardRow = { ...row, cells: withoutCell(row.cells, columnId) }
+  if (row.subrows) next.subrows = row.subrows.map((item) => ({ ...item, cells: withoutCell(item.cells, columnId) }))
+  return next
+}
+
 function blankTable(groupId: string, title: string): BoardGroup {
   return {
     id: groupId,
@@ -373,7 +431,7 @@ function deleteColumn(board: Board, columnId: string): Board {
     groups: board.groups.map((group) => ({
       ...group,
       ...(group.metrics ? { metrics: withoutCell(group.metrics, columnId) } : {}),
-      rows: group.rows.map((row) => ({ ...row, cells: withoutCell(row.cells, columnId) })),
+      rows: group.rows.map((row) => stripRowCells(row, columnId)),
     })),
   }
 }

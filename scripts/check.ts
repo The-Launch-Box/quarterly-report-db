@@ -292,6 +292,52 @@ const titledCell = titled.boards
   .find((board) => board.id === "board-pipeline")
   ?.groups[0]?.rows.find((row) => row.id === pipelineRow.id)?.cells[notes.id]
 if (titledCell !== "Owner") throw new Error("cell title did not save")
+if (reducer(seed, { type: "add-subrow", boardId: "ytd", groupId: "echelon", rowId: pipelineRow.id }) !== seed) {
+  throw new Error("portfolio board accepted a sub-row")
+}
+if (reducer(custom, { type: "add-subrow", boardId: "board-pipeline", groupId: pipelineGroup.id, rowId: "missing" }) !== custom) {
+  throw new Error("unknown row accepted a sub-row")
+}
+const withSub = reducer(custom, { type: "add-subrow", boardId: "board-pipeline", groupId: pipelineGroup.id, rowId: pipelineRow.id })
+const subrow = must(
+  withSub.boards.find((board) => board.id === "board-pipeline")?.groups[0]?.rows.find((row) => row.id === pipelineRow.id)?.subrows?.[0],
+  "sub-row",
+)
+if (subrow.cells[LABEL_COLUMN_ID] !== "") throw new Error("sub-row should start untitled")
+const subFilled = reducer(withSub, {
+  type: "set-cell",
+  boardId: "board-pipeline",
+  groupId: pipelineGroup.id,
+  rowId: subrow.id,
+  columnId: notes.id,
+  value: "Detail",
+})
+const savedSub = subFilled.boards
+  .find((board) => board.id === "board-pipeline")
+  ?.groups[0]?.rows.find((row) => row.id === pipelineRow.id)
+  ?.subrows?.[0]
+if (savedSub?.cells[notes.id] !== "Detail") throw new Error("sub-row cell did not save")
+const droppedSub = reducer(subFilled, {
+  type: "delete-subrow",
+  boardId: "board-pipeline",
+  groupId: pipelineGroup.id,
+  rowId: pipelineRow.id,
+  subrowId: subrow.id,
+})
+if (droppedSub.boards.find((board) => board.id === "board-pipeline")?.groups[0]?.rows.find((row) => row.id === pipelineRow.id)?.subrows) {
+  throw new Error("sub-row was not deleted")
+}
+const parsedSub = parseWorkspace(JSON.parse(JSON.stringify(subFilled)) as unknown)
+if (
+  parsedSub?.boards.find((board) => board.id === "board-pipeline")?.groups[0]?.rows.find((row) => row.id === pipelineRow.id)?.subrows?.[0]
+    ?.cells[notes.id] !== "Detail"
+) {
+  throw new Error("sub-row did not round trip")
+}
+const removedParent = reducer(withSub, { type: "delete-row", boardId: "board-pipeline", groupId: pipelineGroup.id, rowId: pipelineRow.id })
+if (removedParent.boards.find((board) => board.id === "board-pipeline")?.groups[0]?.rows.some((row) => row.id === pipelineRow.id)) {
+  throw new Error("deleting a row left its sub-rows")
+}
 const addedRow = reducer(custom, { type: "add-row", boardId: "board-pipeline", groupId: pipelineGroup.id })
 const newest = addedRow.boards.find((board) => board.id === "board-pipeline")?.groups[0]?.rows.at(-1)
 if (newest?.cells[LABEL_COLUMN_ID] !== "") throw new Error("custom row should start untitled")
