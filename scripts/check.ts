@@ -3,6 +3,7 @@ import os from "node:os"
 import path from "node:path"
 
 import { isAdminEmail, isLaunchboxEmail, launchboxEmailFromClaims } from "../src/auth/access"
+import { firmTableMarks, trendSegment } from "../src/data/firm-chart"
 import { formatCurrency, parseNumber, parsePercentInput } from "../src/data/format"
 import { isExpired, SNAPSHOT_TTL_MS } from "../src/data/retention"
 import { publishWorkspace, readLiveSnapshot, saveSnapshot } from "../server/snapshots"
@@ -790,6 +791,37 @@ try {
 } finally {
   fs.rmSync(dir, { recursive: true, force: true })
 }
+
+const chartColumns = [
+  { id: LABEL_COLUMN_ID, name: "Title", kind: "text" as const },
+  { id: "n", name: "Count", kind: "number" as const },
+  { id: "m", name: "Rate", kind: "number" as const },
+]
+const chartMarks = firmTableMarks(
+  {
+    id: "g",
+    name: "Table",
+    rows: [
+      {
+        id: "a",
+        cells: { [LABEL_COLUMN_ID]: "Alpha", n: "10", m: "2" },
+        subrows: [{ id: "a1", cells: { [LABEL_COLUMN_ID]: "Part", n: "4", m: "1" } }],
+      },
+      { id: "b", cells: { [LABEL_COLUMN_ID]: "", n: "", m: "" } },
+    ],
+  },
+  chartColumns,
+)
+if (chartMarks.length !== 2) throw new Error("blank rows should stay off the graph")
+if (chartMarks[0]?.label !== "Alpha" || chartMarks[0]?.values.n !== 10) throw new Error("table row was not plotted")
+if (chartMarks[1]?.label !== "Alpha · Part" || chartMarks[1]?.values.n !== 4) throw new Error("sub-row was not plotted")
+const rising = trendSegment([
+  { x: 0, y: 1 },
+  { x: 2, y: 5 },
+])
+if (!rising || rising[0].y !== 1 || rising[1].y !== 5) throw new Error("trendline was not a straight fit")
+if (trendSegment([{ x: 1, y: 1 }]) !== null) throw new Error("one point drew a trendline")
+if (trendSegment([{ x: 1, y: 1 }, { x: 1, y: 4 }]) !== null) throw new Error("a vertical cloud drew a trendline")
 
 console.log("ok")
 

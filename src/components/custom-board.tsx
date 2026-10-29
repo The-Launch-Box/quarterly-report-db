@@ -3,6 +3,7 @@ import { useNavigate } from "react-router"
 import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react"
 
 import { EditableCell } from "@/components/board-table"
+import { FirmChart } from "@/components/firm-chart"
 import { ColumnResizeHandle, tablePixelWidth, useColumnWidths } from "@/components/column-resize"
 import { Button, ConfirmDialog, Field, Input, Modal, Select } from "@/components/ui"
 import { listCompanies } from "@/data/metrics"
@@ -118,6 +119,8 @@ export function CustomBoardScreen({ boardId }: { boardId: string }) {
           />
         ))}
       </div>
+
+      <FirmChart board={board} />
 
       <AddColumnDialog
         boardId={board.id}
