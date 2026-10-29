@@ -5,6 +5,7 @@ import { BarChart3, ChevronDown, ChevronRight, ChevronUp, Columns2, Plus, Table2
 import { EditableCell } from "@/components/board-table"
 import { FirmChart } from "@/components/firm-chart"
 import { ColumnResizeHandle, resizeCeiling, storedColumnWidth, tablePixelWidth, useColumnWidths, useFrameWidth } from "@/components/column-resize"
+import { AddTextEntryDialog, BoardTextEntries } from "@/components/text-entries"
 import { Button, ConfirmDialog, Field, Input, Modal, Segmented, Select } from "@/components/ui"
 import { listCompanies } from "@/data/metrics"
 import { useWorkspace } from "@/data/store"
@@ -33,6 +34,7 @@ export function CustomBoardScreen({ boardId }: { boardId: string }) {
   const board = workspace.boards.find((item) => item.id === boardId)
   const [columnGroupId, setColumnGroupId] = useState<string | null>(null)
   const [tableOpen, setTableOpen] = useState(false)
+  const [textOpen, setTextOpen] = useState(false)
   const [pending, setPending] = useState<Pending>(null)
   const [view, setView] = useState<ViewMode>("split")
   const [flash, setFlash] = useState<{ rowId: string; token: number } | null>(null)
@@ -80,6 +82,10 @@ export function CustomBoardScreen({ boardId }: { boardId: string }) {
         </div>
         {canEdit ? (
           <div className="flex flex-wrap items-center gap-2">
+            <Button onClick={() => setTextOpen(true)}>
+              <Plus />
+              Add text
+            </Button>
             <Button onClick={() => setTableOpen(true)}>
               <Plus />
               Add table
@@ -91,6 +97,8 @@ export function CustomBoardScreen({ boardId }: { boardId: string }) {
           </div>
         ) : null}
       </header>
+
+      <BoardTextEntries board={board} companyId={board.firmId} />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-[11px] uppercase tracking-widest text-muted-foreground">View</p>
@@ -151,6 +159,7 @@ export function CustomBoardScreen({ boardId }: { boardId: string }) {
         onClose={() => setColumnGroupId(null)}
       />
       <AddTableDialog boardId={board.id} open={tableOpen} onClose={() => setTableOpen(false)} />
+      <AddTextEntryDialog boardId={board.id} firmWide={false} open={textOpen} onClose={() => setTextOpen(false)} />
       <ConfirmDialog
         open={pending !== null}
         title={pendingCopy.title}

@@ -6,6 +6,7 @@ import { BoardChart } from "@/components/board-chart"
 import { BoardTable } from "@/components/board-table"
 import { CustomBoardScreen } from "@/components/custom-board"
 import { YtdOperatingResults } from "@/components/operating-results"
+import { AddTextEntryDialog, BoardTextEntries } from "@/components/text-entries"
 import { YtdSections } from "@/components/ytd-sections"
 import { Button, ConfirmDialog, Field, Input, KpiCard, Modal, Segmented, Select } from "@/components/ui"
 import { computeKpis, listCompanies } from "@/data/metrics"
@@ -57,6 +58,7 @@ function BoardScreen({ boardId }: { boardId: string }) {
   const [view, setView] = useState<ViewMode>("split")
   const [columnOpen, setColumnOpen] = useState(false)
   const [tableOpen, setTableOpen] = useState(false)
+  const [textOpen, setTextOpen] = useState(false)
   const [companyOpen, setCompanyOpen] = useState(false)
   const [pending, setPending] = useState<Pending>(null)
   if (!board) return null
@@ -85,6 +87,10 @@ function BoardScreen({ boardId }: { boardId: string }) {
         </div>
         {canEdit ? (
           <div className="flex flex-wrap items-center gap-2">
+            <Button onClick={() => setTextOpen(true)}>
+              <Plus />
+              Add text
+            </Button>
             {board.id === "ytd" ? (
               <Button onClick={() => setTableOpen(true)}>
                 <Plus />
@@ -120,6 +126,8 @@ function BoardScreen({ boardId }: { boardId: string }) {
           onCommit={(groupId, value) => dispatch({ type: "set-operating-results", groupId, value })}
         />
       ) : null}
+
+      <BoardTextEntries board={board} companyId={companyId} />
 
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-[11px] uppercase tracking-widest text-muted-foreground">View</p>
@@ -157,6 +165,7 @@ function BoardScreen({ boardId }: { boardId: string }) {
       {view === "table" ? null : <BoardChart key={board.id} board={board} companyId={companyId} />}
 
       <AddColumnDialog boardId={board.id} open={columnOpen} onClose={() => setColumnOpen(false)} />
+      <AddTextEntryDialog boardId={board.id} firmWide open={textOpen} onClose={() => setTextOpen(false)} />
       <AddYtdTableDialog boardId={board.id} open={tableOpen} onClose={() => setTableOpen(false)} />
       <AddCompanyDialog open={companyOpen} onClose={() => setCompanyOpen(false)} />
       <ConfirmDialog

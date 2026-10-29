@@ -10,6 +10,7 @@ import {
   type ColumnKind,
   type Formula,
   type KpiDef,
+  type TextEntry,
   type Workspace,
   type YtdCustomTable,
 } from "./types"
@@ -72,6 +73,12 @@ function readBoard(value: unknown): Board | null {
     }
     if (order.length > 0) ytdTableOrder = order
   }
+  let textEntries: TextEntry[] | undefined
+  if (value.textEntries !== undefined) {
+    const entries = readTextEntries(value.textEntries)
+    if (!entries) return null
+    if (entries.length > 0) textEntries = entries
+  }
   return {
     id: value.id,
     title: value.title,
@@ -86,7 +93,32 @@ function readBoard(value: unknown): Board | null {
     ...(typeof value.firmId === "string" ? { firmId: value.firmId.trim() } : {}),
     ...(ytdCustomTables ? { ytdCustomTables } : {}),
     ...(ytdTableOrder ? { ytdTableOrder } : {}),
+    ...(textEntries ? { textEntries } : {}),
   }
+}
+
+function readTextEntries(value: unknown): TextEntry[] | null {
+  if (!Array.isArray(value)) return null
+  const entries: TextEntry[] = []
+  const seen = new Set<string>()
+  for (const entry of value) {
+    if (!isRecord(entry) || typeof entry.id !== "string" || typeof entry.title !== "string") return null
+    const id = entry.id.trim()
+    const title = entry.title.trim()
+    if (!id || id.length > 80 || !title || title.length > 60 || seen.has(id)) return null
+    const bodies: Record<string, string> = {}
+    if (entry.bodies !== undefined) {
+      if (!isRecord(entry.bodies)) return null
+      for (const [key, body] of Object.entries(entry.bodies)) {
+        if (key.trim() === "" || key.length > 80 || typeof body !== "string") return null
+        const clean = looksLikeHtml(body) ? commitHtml(body) : body
+        if (clean) bodies[key] = clean
+      }
+    }
+    seen.add(id)
+    entries.push({ id, title, bodies })
+  }
+  return entries
 }
 
 function readYtdCustomTables(value: unknown): YtdCustomTable[] | null {

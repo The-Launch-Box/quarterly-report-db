@@ -11,6 +11,7 @@ import {
   type BoardRow,
   type Column,
   type ColumnKind,
+  type TextEntry,
   type Workspace,
   type YtdCustomTable,
 } from "./types"
@@ -48,6 +49,11 @@ export type WorkspaceAction =
   | { type: "rename-company"; groupId: string; name: string }
   | { type: "delete-company"; groupId: string }
   | { type: "set-operating-results"; groupId: string; value: string }
+  | { type: "add-text-entry"; boardId: string; entryId: string; title: string }
+  | { type: "rename-text-entry"; boardId: string; entryId: string; title: string }
+  | { type: "delete-text-entry"; boardId: string; entryId: string }
+  | { type: "move-text-entry"; boardId: string; entryId: string; direction: "up" | "down" }
+  | { type: "set-text-entry"; boardId: string; entryId: string; groupId: string; value: string }
   | { type: "set-firm-metric"; boardId: string; groupId: string; columnId: string; value: string }
   | { type: "add-board"; boardId: string; firmId: string; title: string }
   | { type: "rename-board"; boardId: string; title: string }
@@ -501,7 +507,7 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
         boards: workspace.boards.flatMap((board) => {
           if (board.firmId === action.groupId) return []
           if (board.firmId) return [board]
-          return [{ ...board, groups: board.groups.filter((group) => group.id !== action.groupId) }]
+          return [withoutFirm(board, action.groupId)]
         }),
       }
     }
@@ -537,6 +543,80 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
           group.id === action.groupId ? { ...group, operatingResults: action.value } : group,
         ),
       }))
+    case "add-text-entry": {
+      const title = action.title.trim()
+      const entryId = cleanId(action.entryId)
+      if (!title || title.length > 60 || !entryId) return workspace
+      const board = workspace.boards.find((item) => item.id === action.boardId)
+      if (!board || board.textEntries?.some((entry) => entry.id === entryId)) return workspace
+      const entry: TextEntry = { id: entryId, title, bodies: {} }
+      return mapBoard(workspace, action.boardId, (current) => ({
+        ...current,
+        textEntries: [...(current.textEntries ?? []), entry],
+      }))
+    }
+    case "rename-text-entry": {
+      const title = action.title.trim()
+      if (!title || title.length > 60) return workspace
+      const board = workspace.boards.find((item) => item.id === action.boardId)
+      const entry = board?.textEntries?.find((item) => item.id === action.entryId)
+      if (!entry || entry.title === title) return workspace
+      return mapBoard(workspace, action.boardId, (current) => ({
+        ...current,
+        textEntries: current.textEntries?.map((item) => (item.id === action.entryId ? { ...item, title } : item)),
+      }))
+    }
+    case "delete-text-entry": {
+      const board = workspace.boards.find((item) => item.id === action.boardId)
+      if (!board?.textEntries?.some((entry) => entry.id === action.entryId)) return workspace
+      return mapBoard(workspace, action.boardId, (current) => {
+        const textEntries = current.textEntries?.filter((entry) => entry.id !== action.entryId) ?? []
+        const next = { ...current }
+        if (textEntries.length === 0) delete next.textEntries
+        else next.textEntries = textEntries
+        return next
+      })
+    }
+    case "move-text-entry": {
+      const board = workspace.boards.find((item) => item.id === action.boardId)
+      if (!board?.textEntries) return workspace
+      const order = moveInOrder(
+        board.textEntries.map((entry) => entry.id),
+        action.entryId,
+        action.direction,
+      )
+      if (!order) return workspace
+      const byId = new Map(board.textEntries.map((entry) => [entry.id, entry]))
+      return mapBoard(workspace, action.boardId, (current) => ({
+        ...current,
+        textEntries: order.flatMap((id) => {
+          const entry = byId.get(id)
+          return entry ? [entry] : []
+        }),
+      }))
+    }
+    case "set-text-entry": {
+      const board = workspace.boards.find((item) => item.id === action.boardId)
+      const entry = board?.textEntries?.find((item) => item.id === action.entryId)
+      if (!board || !entry) return workspace
+      const ownerId = board.firmId ?? action.groupId
+      if (board.firmId) {
+        if (action.groupId !== board.firmId) return workspace
+      } else if (!board.groups.some((group) => group.id === action.groupId)) {
+        return workspace
+      }
+      if ((entry.bodies[ownerId] ?? "") === action.value) return workspace
+      return mapBoard(workspace, action.boardId, (current) => ({
+        ...current,
+        textEntries: current.textEntries?.map((item) => {
+          if (item.id !== action.entryId) return item
+          const bodies = { ...item.bodies }
+          if (action.value === "") delete bodies[ownerId]
+          else bodies[ownerId] = action.value
+          return { ...item, bodies }
+        }),
+      }))
+    }
     case "set-firm-metric": {
       const board = workspace.boards.find((item) => item.id === action.boardId)
       const column = board?.columns.find((item) => item.id === action.columnId)
@@ -567,6 +647,21 @@ export function keepFirmBoards(next: Workspace, current: Workspace): Workspace {
   const kept = current.boards.filter((board) => board.firmId && firms.has(board.firmId))
   if (kept.length === 0) return next
   return { ...next, boards: [...next.boards.filter((board) => !board.firmId), ...kept] }
+}
+
+function withoutFirm(board: Board, groupId: string): Board {
+  const groups = board.groups.filter((group) => group.id !== groupId)
+  if (!board.textEntries?.some((entry) => groupId in entry.bodies)) return { ...board, groups }
+  return {
+    ...board,
+    groups,
+    textEntries: board.textEntries.map((entry) => {
+      if (!(groupId in entry.bodies)) return entry
+      const bodies = { ...entry.bodies }
+      delete bodies[groupId]
+      return { ...entry, bodies }
+    }),
+  }
 }
 
 function firmBoard(boardId: string, firmId: string, title: string): Board {

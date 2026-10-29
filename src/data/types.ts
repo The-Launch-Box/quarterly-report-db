@@ -95,6 +95,14 @@ export interface YtdCustomTable {
   columns: Column[]
 }
 
+/** A formatted note on any board. Portfolio boards keep one body per firm. */
+export interface TextEntry {
+  id: string
+  title: string
+  /** Firm id to HTML or plain text. Missing firms are blank. */
+  bodies: Record<string, string>
+}
+
 export interface KpiDef {
   id: string
   label: string
@@ -127,6 +135,8 @@ export interface Board {
   ytdCustomTables?: YtdCustomTable[]
   /** Order of the YTD tables. Built-in ids are "statement" and "ratios". */
   ytdTableOrder?: string[]
+  /** Formatted notes added on this board. Each firm keeps its own text. */
+  textEntries?: TextEntry[]
 }
 
 export interface Workspace {

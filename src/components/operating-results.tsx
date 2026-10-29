@@ -24,7 +24,7 @@ export function YtdOperatingResults({
         {groups.map((group) => (
           <div key={group.id} className="space-y-2">
             {showName ? <h3 className="text-sm font-medium">{group.name}</h3> : null}
-            <OperatingNote
+            <FormattedNote
               label={showName ? `YTD operating results for ${group.name}` : "YTD operating results"}
               value={group.operatingResults ?? ""}
               canEdit={canEdit}
@@ -37,16 +37,20 @@ export function YtdOperatingResults({
   )
 }
 
-function OperatingNote({
+export function FormattedNote({
   label,
   value,
   canEdit,
   onCommit,
+  placeholder = "Add operating results.",
+  emptyLabel = "No operating results yet.",
 }: {
   label: string
   value: string
   canEdit: boolean
   onCommit: (value: string) => void
+  placeholder?: string
+  emptyLabel?: string
 }) {
   const editor = useRef<HTMLDivElement>(null)
   const saved = useRef(value)
@@ -183,7 +187,7 @@ function OperatingNote({
         initialHtml={initialHtml.current}
         label={label}
         canEdit={canEdit}
-        placeholder={canEdit ? "Add operating results." : "No operating results yet."}
+        placeholder={canEdit ? placeholder : emptyLabel}
         onFocus={onFocus}
         onBlur={onBlur}
         onInput={onInput}

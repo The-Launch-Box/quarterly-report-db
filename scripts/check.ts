@@ -1026,6 +1026,156 @@ if (trendValue(rising, 2).y !== 5) throw new Error("trendline hover ran past the
 if (trendSegment([{ x: 1, y: 1 }]) !== null) throw new Error("one point drew a trendline")
 if (trendSegment([{ x: 1, y: 1 }, { x: 1, y: 4 }]) !== null) throw new Error("a vertical cloud drew a trendline")
 
+if (reducer(seed, { type: "add-text-entry", boardId: "missing", entryId: "note", title: "Notes" }) !== seed) {
+  throw new Error("a missing board accepted a text entry")
+}
+if (reducer(seed, { type: "add-text-entry", boardId: "headcount", entryId: "note", title: "  " }) !== seed) {
+  throw new Error("a blank text title was accepted")
+}
+const withNote = reducer(seed, { type: "add-text-entry", boardId: "headcount", entryId: "note", title: "  Commentary " })
+const notedHeadcount = must(withNote.boards.find((board) => board.id === "headcount"), "headcount with text")
+if (notedHeadcount.textEntries?.[0]?.title !== "Commentary" || notedHeadcount.textEntries[0].id !== "note") {
+  throw new Error("text was not added to an existing board")
+}
+if (reducer(withNote, { type: "add-text-entry", boardId: "headcount", entryId: "note", title: "Again" }) !== withNote) {
+  throw new Error("a duplicate text id was accepted")
+}
+const writtenNote = reducer(withNote, {
+  type: "set-text-entry",
+  boardId: "headcount",
+  entryId: "note",
+  groupId: "improv",
+  value: "<h2>Heads</h2><p>Steady.</p>",
+})
+const improvNote = writtenNote.boards.find((board) => board.id === "headcount")?.textEntries?.[0]?.bodies.improv
+if (improvNote !== "<h2>Heads</h2><p>Steady.</p>") throw new Error("firm text did not save")
+if (writtenNote.boards.find((board) => board.id === "revenue")?.textEntries) throw new Error("text leaked onto another board")
+if (
+  reducer(writtenNote, {
+    type: "set-text-entry",
+    boardId: "headcount",
+    entryId: "note",
+    groupId: "improv",
+    value: "<h2>Heads</h2><p>Steady.</p>",
+  }) !== writtenNote
+) {
+  throw new Error("the same text was written again")
+}
+const secondNote = reducer(writtenNote, { type: "add-text-entry", boardId: "headcount", entryId: "risks", title: "Risks" })
+const movedNote = reducer(secondNote, { type: "move-text-entry", boardId: "headcount", entryId: "risks", direction: "up" })
+const movedTitles = movedNote.boards.find((board) => board.id === "headcount")?.textEntries?.map((entry) => entry.id).join(",")
+if (movedTitles !== "risks,note") throw new Error("text did not move up")
+if (reducer(movedNote, { type: "move-text-entry", boardId: "headcount", entryId: "risks", direction: "up" }) !== movedNote) {
+  throw new Error("the first text moved further up")
+}
+const renamedNote = reducer(movedNote, { type: "rename-text-entry", boardId: "headcount", entryId: "risks", title: "Watch items" })
+if (renamedNote.boards.find((board) => board.id === "headcount")?.textEntries?.[0]?.title !== "Watch items") {
+  throw new Error("text was not renamed")
+}
+const clearedNote = reducer(writtenNote, {
+  type: "set-text-entry",
+  boardId: "headcount",
+  entryId: "note",
+  groupId: "improv",
+  value: "",
+})
+if (clearedNote.boards.find((board) => board.id === "headcount")?.textEntries?.[0]?.bodies.improv !== undefined) {
+  throw new Error("clearing text left the firm body")
+}
+const droppedNote = reducer(renamedNote, { type: "delete-text-entry", boardId: "headcount", entryId: "note" })
+const remainingNotes = droppedNote.boards.find((board) => board.id === "headcount")?.textEntries
+if (remainingNotes?.length !== 1 || remainingNotes[0]?.id !== "risks") throw new Error("text was not deleted")
+if (reducer(droppedNote, { type: "delete-text-entry", boardId: "headcount", entryId: "note" }) !== droppedNote) {
+  throw new Error("a missing text entry was deleted again")
+}
+const firmNoted = reducer(custom, { type: "add-text-entry", boardId: "board-pipeline", entryId: "brief", title: "Brief" })
+const firmWritten = reducer(firmNoted, {
+  type: "set-text-entry",
+  boardId: "board-pipeline",
+  entryId: "brief",
+  groupId: "echelon",
+  value: "<p>Open deals.</p>",
+})
+const firmBody = firmWritten.boards.find((board) => board.id === "board-pipeline")?.textEntries?.[0]?.bodies.echelon
+if (firmBody !== "<p>Open deals.</p>") throw new Error("a new board did not keep its text")
+const tableGroup = firmWritten.boards.find((board) => board.id === "board-pipeline")?.groups[0]
+if (
+  !tableGroup ||
+  reducer(firmWritten, {
+    type: "set-text-entry",
+    boardId: "board-pipeline",
+    entryId: "brief",
+    groupId: tableGroup.id,
+    value: "Wrong owner",
+  }) !== firmWritten
+) {
+  throw new Error("a firm board stored text on a table")
+}
+const lostFirm = reducer(writtenNote, { type: "delete-company", groupId: "improv" })
+const lostEntry = lostFirm.boards.find((board) => board.id === "headcount")?.textEntries?.[0]
+if (!lostEntry || "improv" in lostEntry.bodies) throw new Error("deleting a firm left its text")
+if (lostFirm.boards.find((board) => board.id === "headcount")?.groups.some((group) => group.id === "improv")) {
+  throw new Error("deleting a firm left its table")
+}
+const roundText = must(parseWorkspace(JSON.parse(JSON.stringify(firmWritten)) as unknown), "text round trip")
+if (roundText.boards.find((board) => board.id === "board-pipeline")?.textEntries?.[0]?.bodies.echelon !== "<p>Open deals.</p>") {
+  throw new Error("text dropped on save")
+}
+const hostileText = parseWorkspace({
+  version: 1,
+  boards: [
+    {
+      id: "ytd",
+      title: "YTD",
+      subtitle: "",
+      columns: [{ id: "label", name: "Line", kind: "text" }],
+      groups: [{ id: "echelon", name: "Echelon", rows: [{ id: "row", cells: { label: "Revenue" } }] }],
+      textEntries: [
+        {
+          id: "note",
+          title: "  Brief ",
+          bodies: { echelon: "<script>alert(1)</script><p>Hi <b>there</b></p>", other: "" },
+        },
+      ],
+    },
+  ],
+})
+const cleanedText = hostileText?.boards[0]?.textEntries?.[0]
+if (cleanedText?.title !== "Brief" || cleanedText.bodies.echelon !== "<p>Hi <strong>there</strong></p>" || cleanedText.bodies.other) {
+  throw new Error(`hostile text was not cleaned: ${cleanedText?.bodies.echelon ?? "missing"}`)
+}
+const emptyEntries = parseWorkspace({
+  version: 1,
+  boards: [
+    {
+      id: "ytd",
+      title: "YTD",
+      subtitle: "",
+      columns: [{ id: "label", name: "Line", kind: "text" }],
+      groups: [{ id: "echelon", name: "Echelon", rows: [{ id: "row", cells: { label: "Revenue" } }] }],
+      textEntries: [],
+    },
+  ],
+})
+if (emptyEntries?.boards[0]?.textEntries) throw new Error("an empty text list was kept")
+if (
+  parseWorkspace({
+    version: 1,
+    boards: [
+      {
+        id: "ytd",
+        title: "YTD",
+        subtitle: "",
+        columns: [{ id: "label", name: "Line", kind: "text" }],
+        groups: [{ id: "echelon", name: "Echelon", rows: [{ id: "row", cells: { label: "Revenue" } }] }],
+        textEntries: [{ id: "note", title: "Brief", bodies: { echelon: 12 } }],
+      },
+    ],
+  }) !== null
+) {
+  throw new Error("a numeric text body was accepted")
+}
+
 console.log("ok")
 
 function stripExpected(workspace: Workspace): Workspace {
