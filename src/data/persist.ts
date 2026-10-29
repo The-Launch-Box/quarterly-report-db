@@ -1,3 +1,4 @@
+import { commitHtml, looksLikeHtml } from "./rich-text"
 import {
   LABEL_COLUMN_ID,
   type Board,
@@ -107,7 +108,9 @@ function readGroup(value: unknown): BoardGroup | null {
   const group: BoardGroup = { id: value.id, name: value.name, rows }
   if (value.operatingResults !== undefined) {
     if (typeof value.operatingResults !== "string") return null
-    group.operatingResults = value.operatingResults
+    group.operatingResults = looksLikeHtml(value.operatingResults)
+      ? commitHtml(value.operatingResults)
+      : value.operatingResults
   }
   if (value.metrics !== undefined) {
     const metrics = readCells(value.metrics)

@@ -9,6 +9,7 @@ import { publishWorkspace, readLiveSnapshot, saveSnapshot } from "../server/snap
 import { aggregateColumn, cellNumber, computeKpis, defaultBarColumnIds, formatColumnValue, profitMarginChart } from "../src/data/metrics"
 import { parseWorkspace } from "../src/data/persist"
 import { reducer } from "../src/data/reducer"
+import { commitHtml, editorHtml, sanitizeRichText } from "../src/data/rich-text"
 import { createSeedWorkspace, IMPROV_OPERATING_RESULTS, seedProblems, varianceStatus, withExpectedColumn, withFirmRatios, withImprovDeck, withoutYtdSubtitle } from "../src/data/seed"
 import { EXPECTED_COLUMN_ID, LABEL_COLUMN_ID, type Board, type Workspace } from "../src/data/types"
 
@@ -328,6 +329,60 @@ if (!roundAug?.omitFromRollup) throw new Error("rollup flag dropped on save")
 const editedNote = reducer(seed, { type: "set-operating-results", groupId: "improv", value: "Backlog moved." })
 const savedNote = editedNote.boards.find((board) => board.id === "ytd")?.groups.find((group) => group.id === "improv")?.operatingResults
 if (savedNote !== "Backlog moved.") throw new Error("operating results did not save")
+for (const group of ytd.groups) {
+  if (group.id !== "improv" && group.operatingResults !== undefined) {
+    throw new Error(`${group.id} should start without operating results`)
+  }
+}
+const echelonNote = reducer(seed, {
+  type: "set-operating-results",
+  groupId: "echelon",
+  value: "<h1>Quarter</h1><p><strong>Ahead</strong></p>",
+})
+const echelonSaved = echelonNote.boards.find((board) => board.id === "ytd")?.groups.find((group) => group.id === "echelon")?.operatingResults
+if (echelonSaved !== "<h1>Quarter</h1><p><strong>Ahead</strong></p>") throw new Error("firm operating results did not save")
+const improvUntouched = echelonNote.boards.find((board) => board.id === "ytd")?.groups.find((group) => group.id === "improv")?.operatingResults
+if (improvUntouched !== IMPROV_OPERATING_RESULTS) throw new Error("another firm's note changed Improv")
+const hostile = parseWorkspace({
+  version: 1,
+  boards: [
+    {
+      id: "ytd",
+      title: "YTD",
+      subtitle: "",
+      sumRows: false,
+      columns: [{ id: "label", name: "Line", kind: "text" }],
+      kpis: [],
+      groups: [
+        {
+          id: "echelon",
+          name: "Echelon",
+          operatingResults: "<script>alert(1)</script><p onclick=\"x\">Hi <b>there</b></p>",
+          rows: [{ id: "row", cells: { label: "Revenue" } }],
+        },
+      ],
+    },
+  ],
+})
+const cleaned = hostile?.boards[0]?.groups[0]?.operatingResults
+if (cleaned !== "<p>Hi <strong>there</strong></p>") throw new Error(`hostile note was not cleaned: ${cleaned ?? "missing"}`)
+if (editorHtml("a\n\nb") !== "<p>a</p><p><br></p><p>b</p>") throw new Error("plain notes should keep blank lines")
+if (editorHtml("a < b & c") !== "<p>a &lt; b &amp; c</p>") throw new Error("plain notes should escape")
+if (editorHtml(IMPROV_OPERATING_RESULTS).includes("<script")) throw new Error("improv note was treated as markup")
+const formatted = "<h1>Title</h1><p>Body <b>bold</b> <i>lean</i></p><ul><li>One</li><li>Two</li></ul>"
+const safe = sanitizeRichText(formatted)
+if (safe !== "<h1>Title</h1><p>Body <strong>bold</strong> <em>lean</em></p><ul><li>One</li><li>Two</li></ul>") {
+  throw new Error(`formatted note changed: ${safe}`)
+}
+if (sanitizeRichText(safe) !== safe) throw new Error("sanitizer should be stable")
+if (sanitizeRichText("<img src=x onerror=alert(1)>") !== "") throw new Error("image markup should be dropped")
+if (sanitizeRichText("<h1><script>alert(1)</script>Hi</h1>") !== "<h1>Hi</h1>") throw new Error("script inside a heading should be dropped")
+if (sanitizeRichText('<p><a href="javascript:alert(1)">x</a></p>') !== "<p>x</p>") throw new Error("links should be unwrapped")
+if (commitHtml("<p><br></p>") !== "") throw new Error("an empty note should save as blank")
+if (sanitizeRichText("<div>Line</div>") !== "<p>Line</p>") throw new Error("divs should become paragraphs")
+if (sanitizeRichText("<p>Hi<br>there</p><h2>Next</h2><p><u>Under</u></p>") !== "<p>Hi<br>there</p><h2>Next</h2><p><u>Under</u></p>") {
+  throw new Error("breaks, headings, and underline should stay")
+}
 
 const stale = structuredClone(seed)
 const staleImprov = must(stale.boards.find((board) => board.id === "ytd")?.groups.find((group) => group.id === "improv"), "stale improv")

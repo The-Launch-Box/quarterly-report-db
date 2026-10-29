@@ -1,12 +1,12 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useState } from "react"
 import { useParams } from "react-router"
 import { BarChart3, Columns2, Plus, RotateCcw, Table2 } from "lucide-react"
 
 import { BoardChart } from "@/components/board-chart"
 import { BoardTable } from "@/components/board-table"
+import { YtdOperatingResults } from "@/components/operating-results"
 import { Button, ConfirmDialog, Field, Input, KpiCard, Modal, Segmented, Select } from "@/components/ui"
 import { computeKpis, listCompanies } from "@/data/metrics"
-import { IMPROV_OPERATING_RESULTS } from "@/data/seed"
 import { useWorkspace } from "@/data/store"
 import type { ColumnKind } from "@/data/types"
 import { cn } from "@/lib/cn"
@@ -103,11 +103,11 @@ function BoardScreen({ boardId }: { boardId: string }) {
         ))}
       </section>
 
-      {board.id === "ytd" && companyId === "improv" ? (
-        <OperatingResults
-          value={board.groups.find((group) => group.id === "improv")?.operatingResults ?? IMPROV_OPERATING_RESULTS}
+      {board.id === "ytd" ? (
+        <YtdOperatingResults
+          groups={companyId === "all" ? board.groups : board.groups.filter((group) => group.id === companyId)}
           canEdit={canEdit}
-          onCommit={(value) => dispatch({ type: "set-operating-results", groupId: "improv", value })}
+          onCommit={(groupId, value) => dispatch({ type: "set-operating-results", groupId, value })}
         />
       ) : null}
 
@@ -148,58 +148,6 @@ function BoardScreen({ boardId }: { boardId: string }) {
         onConfirm={confirmPending}
       />
     </div>
-  )
-}
-
-function OperatingResults({
-  value,
-  canEdit,
-  onCommit,
-}: {
-  value: string
-  canEdit: boolean
-  onCommit: (value: string) => void
-}) {
-  const [draft, setDraft] = useState(value)
-  const [focused, setFocused] = useState(false)
-  const cancel = useRef(false)
-
-  useEffect(() => {
-    if (!focused) setDraft(value)
-  }, [value, focused])
-
-  return (
-    <section className="space-y-2">
-      <h2 className="text-2xl leading-none">YTD operating results</h2>
-      <textarea
-        aria-label="YTD operating results"
-        readOnly={!canEdit}
-        rows={12}
-        value={draft}
-        onFocus={() => setFocused(true)}
-        onChange={(event) => setDraft(event.target.value)}
-        onBlur={() => {
-          setFocused(false)
-          if (!canEdit || cancel.current) {
-            cancel.current = false
-            setDraft(value)
-            return
-          }
-          if (draft !== value) onCommit(draft)
-        }}
-        onKeyDown={(event) => {
-          if (event.key === "Escape") {
-            cancel.current = true
-            event.currentTarget.blur()
-          }
-        }}
-        className={cn(
-          "min-h-40 w-full resize-y rounded-md border border-border bg-bg-raised px-3 py-2 text-sm text-foreground",
-          "outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40",
-          !canEdit && "focus-visible:ring-0",
-        )}
-      />
-    </section>
   )
 }
 

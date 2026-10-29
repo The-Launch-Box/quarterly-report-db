@@ -55,7 +55,7 @@ export interface BoardGroup {
   id: string
   name: string
   rows: BoardRow[]
-  /** Improv commentary on the YTD board. Editable plaintext. */
+  /** Commentary on the YTD board. Plain text, or a small set of formatted HTML. */
   operatingResults?: string
   /** Firm-level ratios, keyed by column id. Shared by every line in the firm. */
   metrics?: Record<string, string>
