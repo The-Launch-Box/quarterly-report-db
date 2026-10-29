@@ -269,6 +269,17 @@ export function withImprovDeck(workspace: Workspace): Workspace {
   return changed ? { ...workspace, boards } : workspace
 }
 
+/** Drops the note under YTD financial results, including on a saved board. */
+export function withoutYtdSubtitle(workspace: Workspace): Workspace {
+  let changed = false
+  const boards = workspace.boards.map((board) => {
+    if (board.id !== "ytd" || board.subtitle === "") return board
+    changed = true
+    return { ...board, subtitle: "" }
+  })
+  return changed ? { ...workspace, boards } : workspace
+}
+
 /** Adds the YTD ratio columns to a saved board that predates them. */
 export function withFirmRatios(workspace: Workspace): Workspace {
   let changed = false
@@ -330,7 +341,7 @@ export function createSeedWorkspace(): Workspace {
       {
         id: "ytd",
         title: "YTD financial results",
-        subtitle: "Firm ratios sit to the right of status.",
+        subtitle: "",
         aggregateRows: false,
         firmRatios: true,
         columns: YTD_COLUMNS,

@@ -9,7 +9,7 @@ import { publishWorkspace, readLiveSnapshot, saveSnapshot } from "../server/snap
 import { aggregateColumn, cellNumber, computeKpis, defaultBarColumnIds, formatColumnValue, profitMarginChart } from "../src/data/metrics"
 import { parseWorkspace } from "../src/data/persist"
 import { reducer } from "../src/data/reducer"
-import { createSeedWorkspace, IMPROV_OPERATING_RESULTS, seedProblems, varianceStatus, withExpectedColumn, withFirmRatios, withImprovDeck } from "../src/data/seed"
+import { createSeedWorkspace, IMPROV_OPERATING_RESULTS, seedProblems, varianceStatus, withExpectedColumn, withFirmRatios, withImprovDeck, withoutYtdSubtitle } from "../src/data/seed"
 import { EXPECTED_COLUMN_ID, LABEL_COLUMN_ID, type Board, type Workspace } from "../src/data/types"
 
 function must<T>(value: T | undefined | null, message: string): T {
@@ -172,7 +172,14 @@ for (const [offset, id] of firmRatioIds.entries()) {
 }
 if (headcount.columns.some((column) => column.scope === "firm")) throw new Error("headcount should not carry firm ratios")
 if (defaultBarColumnIds(ytd).join() !== "q3,q4") throw new Error("firm ratios should stay off the default chart")
-if (ytd.subtitle.includes("Expected sits beside Q1")) throw new Error("the YTD column note should be gone")
+if (ytd.subtitle !== "") throw new Error("YTD financial results should have no subtitle")
+const noted = structuredClone(seed)
+const notedYtd = must(noted.boards.find((board) => board.id === "ytd"), "noted ytd")
+notedYtd.subtitle = "Firm ratios sit to the right of status."
+if (withoutYtdSubtitle(noted).boards.find((board) => board.id === "ytd")?.subtitle !== "") {
+  throw new Error("a saved YTD subtitle should be cleared")
+}
+if (withoutYtdSubtitle(seed) !== seed) throw new Error("an empty YTD subtitle was rewritten")
 const echelonMargins = must(profitMarginChart(ytd, "echelon"), "echelon margins")
 const echelonQ3 = must(echelonMargins.points.find((point) => point.key.endsWith("-q3")), "echelon q3 margin")
 if (echelonQ3.gross === null || Math.abs(echelonQ3.gross - 0.58) > 0.0001) throw new Error("echelon gross margin")
