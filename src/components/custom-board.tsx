@@ -3,6 +3,7 @@ import { useNavigate } from "react-router"
 import { Plus, Trash2 } from "lucide-react"
 
 import { EditableCell } from "@/components/board-table"
+import { ColumnResizeHandle, tablePixelWidth, useColumnWidths } from "@/components/column-resize"
 import { Button, ConfirmDialog, Field, Input, Modal, Select } from "@/components/ui"
 import { listCompanies } from "@/data/metrics"
 import { useWorkspace } from "@/data/store"
@@ -104,6 +105,9 @@ export function CustomBoardScreen({ boardId }: { boardId: string }) {
             onRenameColumn={(columnId, name) =>
               dispatch({ type: "rename-column", boardId, groupId: group.id, columnId, name })
             }
+            onResizeColumn={(columnId, width) =>
+              dispatch({ type: "set-column-width", boardId, groupId: group.id, columnId, width })
+            }
             onDeleteColumn={(id, name) => setPending({ kind: "column", groupId: group.id, id, name })}
             onDeleteRow={(rowId) => dispatch({ type: "delete-row", boardId, groupId: group.id, rowId })}
             onDelete={() => setPending({ kind: "table", id: group.id, name: group.name })}
@@ -164,6 +168,7 @@ function FirmTable({
   onAddColumn,
   onRename,
   onRenameColumn,
+  onResizeColumn,
   onDeleteColumn,
   onDeleteRow,
   onDelete,
@@ -179,10 +184,14 @@ function FirmTable({
   onAddColumn: () => void
   onRename: (title: string) => void
   onRenameColumn: (columnId: string, name: string) => void
+  onResizeColumn: (columnId: string, width: number) => void
   onDeleteColumn: (columnId: string, name: string) => void
   onDeleteRow: (rowId: string) => void
   onDelete: () => void
 }) {
+  const { widthOf, onPointerDown } = useColumnWidths(onResizeColumn)
+  const tableWidth = tablePixelWidth(columns, canEdit, widthOf)
+
   return (
     <section className="space-y-3">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -207,10 +216,16 @@ function FirmTable({
         ) : null}
       </div>
       <div className="max-h-[70vh] overflow-auto rounded-lg border border-border bg-card">
-        <table className="w-full min-w-[640px] border-separate border-spacing-0 text-sm">
+        <table className="border-separate border-spacing-0 text-sm" style={{ width: tableWidth, tableLayout: "fixed" }}>
           <caption className="sr-only">
             {group.name} on {boardTitle}
           </caption>
+          <colgroup>
+            {columns.map((column) => (
+              <col key={column.id} style={{ width: widthOf(column) }} />
+            ))}
+            {canEdit ? <col style={{ width: 48 }} /> : null}
+          </colgroup>
           <thead>
             <tr>
               {columns.map((column) => (
@@ -218,11 +233,9 @@ function FirmTable({
                   key={column.id}
                   scope="col"
                   className={cn(
-                    "group/col sticky top-0 z-20 border-b border-border bg-card px-2 py-2 text-left align-bottom text-[11px] font-medium tracking-widest text-muted-foreground uppercase",
-                    column.id === LABEL_COLUMN_ID && "left-0 z-30 min-w-56 border-r border-border-soft",
-                    column.kind === "status" && "min-w-36",
-                    isNumeric(column.kind) && "min-w-36 text-right",
-                    column.kind === "text" && column.id !== LABEL_COLUMN_ID && "min-w-44",
+                    "group/col relative sticky top-0 z-20 overflow-hidden border-b border-border bg-card px-2 py-2 text-left align-bottom text-[11px] font-medium tracking-widest text-muted-foreground uppercase",
+                    column.id === LABEL_COLUMN_ID && "left-0 z-30 border-r border-border-soft",
+                    isNumeric(column.kind) && "text-right",
                   )}
                 >
                   <div className={cn("flex items-center gap-1", isNumeric(column.kind) && "justify-end")}>
@@ -239,6 +252,14 @@ function FirmTable({
                       </Button>
                     ) : null}
                   </div>
+                  {canEdit ? (
+                    <ColumnResizeHandle
+                      label={column.name}
+                      width={widthOf(column)}
+                      onPointerDown={(event) => onPointerDown(column, event)}
+                      onResize={(width) => onResizeColumn(column.id, width)}
+                    />
+                  ) : null}
                 </th>
               ))}
               {canEdit ? (
@@ -262,8 +283,8 @@ function FirmTable({
                       <td
                         key={column.id}
                         className={cn(
-                          "relative border-b border-border-soft bg-card px-1 py-1 group-hover:bg-bg-raised",
-                          column.id === LABEL_COLUMN_ID && "sticky left-0 z-10 min-w-56 border-r border-border-soft",
+                          "relative overflow-hidden border-b border-border-soft bg-card px-1 py-1 group-hover:bg-bg-raised",
+                          column.id === LABEL_COLUMN_ID && "sticky left-0 z-10 border-r border-border-soft",
                         )}
                       >
                         {token !== null ? <span key={token} className="cell-flash pointer-events-none absolute inset-0" /> : null}

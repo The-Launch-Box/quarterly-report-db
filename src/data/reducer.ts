@@ -1,5 +1,15 @@
 import { listCompanies } from "./metrics"
-import { LABEL_COLUMN_ID, type Board, type BoardGroup, type BoardRow, type Column, type ColumnKind, type Workspace } from "./types"
+import {
+  LABEL_COLUMN_ID,
+  MAX_COLUMN_WIDTH,
+  MIN_COLUMN_WIDTH,
+  type Board,
+  type BoardGroup,
+  type BoardRow,
+  type Column,
+  type ColumnKind,
+  type Workspace,
+} from "./types"
 
 const RESERVED_BOARD_IDS = new Set(["ytd", "headcount", "revenue"])
 
@@ -10,6 +20,7 @@ export type WorkspaceAction =
   | { type: "add-column"; boardId: string; groupId?: string; name: string; kind: ColumnKind }
   | { type: "rename-column"; boardId: string; groupId?: string; columnId: string; name: string }
   | { type: "delete-column"; boardId: string; groupId?: string; columnId: string }
+  | { type: "set-column-width"; boardId: string; groupId?: string; columnId: string; width: number }
   | { type: "add-table"; boardId: string; groupId: string; title: string }
   | { type: "rename-table"; boardId: string; groupId: string; title: string }
   | { type: "delete-table"; boardId: string; groupId: string }
@@ -90,6 +101,36 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
           ...group,
           columns: tableColumns(board, group).map((column) =>
             column.id === action.columnId ? { ...column, name } : column,
+          ),
+        }))
+      })
+    }
+    case "set-column-width": {
+      if (!Number.isFinite(action.width)) return workspace
+      const width = Math.round(action.width)
+      if (width < MIN_COLUMN_WIDTH || width > MAX_COLUMN_WIDTH) return workspace
+      const board = workspace.boards.find((item) => item.id === action.boardId)
+      if (!board) return workspace
+      if (board.firmId) {
+        const group = board.groups.find((item) => item.id === (action.groupId ?? board.groups[0]?.id))
+        const current = group ? tableColumns(board, group).find((column) => column.id === action.columnId) : undefined
+        if (!current || current.width === width) return workspace
+      } else if (board.columns.find((column) => column.id === action.columnId)?.width === width) {
+        return workspace
+      } else if (!board.columns.some((column) => column.id === action.columnId)) {
+        return workspace
+      }
+      return mapBoard(workspace, action.boardId, (current) => {
+        if (!current.firmId) {
+          return {
+            ...current,
+            columns: current.columns.map((column) => (column.id === action.columnId ? { ...column, width } : column)),
+          }
+        }
+        return mapFirmTable(current, action.groupId, (group) => ({
+          ...group,
+          columns: tableColumns(current, group).map((column) =>
+            column.id === action.columnId ? { ...column, width } : column,
           ),
         }))
       })
@@ -356,6 +397,7 @@ function stripColumn(column: Column, columnId: string): Column | null {
 function plainColumn(column: Column): Column {
   const next: Column = { id: column.id, name: column.name, kind: column.kind }
   if (column.emphasis) next.emphasis = true
+  if (column.width !== undefined) next.width = column.width
   return next
 }
 

@@ -1,5 +1,9 @@
 export const LABEL_COLUMN_ID = "label"
 
+/** Smallest and largest column a drag can leave behind, in pixels. */
+export const MIN_COLUMN_WIDTH = 72
+export const MAX_COLUMN_WIDTH = 720
+
 /** Plan column. On the YTD board it sits directly beside Q1. */
 export const EXPECTED_COLUMN_ID = "expected"
 
@@ -42,6 +46,8 @@ export interface Column {
   decimals?: number
   /** Shown on the column header. */
   hint?: string
+  /** Dragged width in pixels. Unset columns use a default for their type. */
+  width?: number
 }
 
 export interface BoardRow {

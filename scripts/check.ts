@@ -239,6 +239,46 @@ const parsedTables = parseWorkspace(JSON.parse(JSON.stringify(widened)) as unkno
 if (parsedTables?.boards.find((board) => board.id === "board-pipeline")?.groups[1]?.columns?.some((column) => column.name === "Target") !== true) {
   throw new Error("table columns did not round trip")
 }
+const sized = reducer(custom, {
+  type: "set-column-width",
+  boardId: "board-pipeline",
+  groupId: pipelineGroup.id,
+  columnId: notes.id,
+  width: 320.4,
+})
+const sizedBoard = must(sized.boards.find((board) => board.id === "board-pipeline"), "sized board")
+if (sizedBoard.columns.find((column) => column.id === notes.id)?.width !== 320) throw new Error("column width was not saved")
+if (reducer(sized, { type: "set-column-width", boardId: "board-pipeline", groupId: pipelineGroup.id, columnId: notes.id, width: 320 }) !== sized) {
+  throw new Error("an unchanged column width was rewritten")
+}
+if (reducer(custom, { type: "set-column-width", boardId: "board-pipeline", groupId: pipelineGroup.id, columnId: notes.id, width: 20 }) !== custom) {
+  throw new Error("a tiny column width was saved")
+}
+const sizedTable = reducer(withTable, {
+  type: "set-column-width",
+  boardId: "board-pipeline",
+  groupId: "table-ratios",
+  columnId: ratioColumn.id,
+  width: 96,
+})
+const sizedTables = must(sizedTable.boards.find((board) => board.id === "board-pipeline"), "sized tables")
+if (sizedTables.groups[1]?.columns?.find((column) => column.id === ratioColumn.id)?.width !== 96) {
+  throw new Error("table column width was not saved")
+}
+if (sizedTables.groups[0]?.columns?.find((column) => column.id === notes.id)?.width === 96) {
+  throw new Error("table column width changed the first table")
+}
+const wideRevenue = reducer(seed, { type: "set-column-width", boardId: "revenue", columnId: "q3", width: 200 })
+if (wideRevenue.boards.find((board) => board.id === "revenue")?.columns.find((column) => column.id === "q3")?.width !== 200) {
+  throw new Error("portfolio column width was not saved")
+}
+if (wideRevenue.boards.find((board) => board.id === "ytd")?.columns.find((column) => column.id === "q3")?.width !== undefined) {
+  throw new Error("portfolio column width changed another board")
+}
+const parsedWidth = parseWorkspace(JSON.parse(JSON.stringify(sized)) as unknown)
+if (parsedWidth?.boards.find((board) => board.id === "board-pipeline")?.columns.find((column) => column.id === notes.id)?.width !== 320) {
+  throw new Error("column width did not round trip")
+}
 const pipelineRow = must(pipelineGroup.rows[0], "pipeline row")
 const titled = reducer(custom, {
   type: "set-cell",

@@ -1,6 +1,8 @@
 import { commitHtml, looksLikeHtml } from "./rich-text"
 import {
   LABEL_COLUMN_ID,
+  MAX_COLUMN_WIDTH,
+  MIN_COLUMN_WIDTH,
   type Board,
   type BoardGroup,
   type BoardRow,
@@ -75,6 +77,7 @@ function readColumn(value: unknown): Column | null {
   if (value.scope === "firm") column.scope = "firm"
   if (isDecimalPlaces(value.decimals)) column.decimals = value.decimals
   if (typeof value.hint === "string") column.hint = value.hint
+  if (isColumnWidth(value.width)) column.width = value.width
   if (value.formula !== undefined) {
     const formula = readFormula(value.formula)
     if (!formula) return null
@@ -164,6 +167,10 @@ function readKpi(value: unknown): KpiDef | null {
 
 function isDecimalPlaces(value: unknown): value is number {
   return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 6
+}
+
+function isColumnWidth(value: unknown): value is number {
+  return typeof value === "number" && Number.isInteger(value) && value >= MIN_COLUMN_WIDTH && value <= MAX_COLUMN_WIDTH
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

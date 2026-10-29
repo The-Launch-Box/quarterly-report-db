@@ -6,6 +6,7 @@ import { formatCurrency, formatNumber, formatPercent, parseNumber, parsePercentI
 import { useWorkspace } from "@/data/store"
 import { LABEL_COLUMN_ID, STATUS_VALUES, type Board, type BoardRow, type Column, type ColumnKind, type StatusValue } from "@/data/types"
 import { cn } from "@/lib/cn"
+import { ColumnResizeHandle, tablePixelWidth, useColumnWidths } from "@/components/column-resize"
 import { Button, Input } from "@/components/ui"
 
 interface BoardTableProps {
@@ -30,6 +31,10 @@ export function BoardTable({
   const [flash, setFlash] = useState<{ rowId: string; token: number } | null>(null)
   const flashCount = useRef(0)
   const groups = companyId === "all" ? board.groups : board.groups.filter((group) => group.id === companyId)
+  const { widthOf, onPointerDown } = useColumnWidths((columnId, width) =>
+    dispatch({ type: "set-column-width", boardId: board.id, columnId, width }),
+  )
+  const tableWidth = tablePixelWidth(board.columns, canEdit, widthOf)
 
   function commitCell(groupId: string, rowId: string, columnId: string, value: string, previous: string) {
     if (value === previous) return
@@ -52,8 +57,14 @@ export function BoardTable({
 
   return (
     <div className="max-h-[70vh] overflow-auto rounded-lg border border-border bg-card">
-      <table className="w-full min-w-[1040px] border-separate border-spacing-0 text-sm">
+      <table className="border-separate border-spacing-0 text-sm" style={{ width: tableWidth, tableLayout: "fixed" }}>
         <caption className="sr-only">{board.title}</caption>
+        <colgroup>
+          {board.columns.map((column) => (
+            <col key={column.id} style={{ width: widthOf(column) }} />
+          ))}
+          {canEdit ? <col style={{ width: 48 }} /> : null}
+        </colgroup>
         <thead>
           <tr>
             {board.columns.map((column) => (
@@ -61,11 +72,10 @@ export function BoardTable({
                 key={column.id}
                 scope="col"
                 className={cn(
-                  "group/col sticky top-0 z-20 border-b border-border bg-card px-2 py-2 text-left align-bottom text-[11px] font-medium tracking-widest text-muted-foreground uppercase",
-                  column.id === LABEL_COLUMN_ID && "left-0 z-30 min-w-56 border-r border-border-soft",
-                  column.kind === "status" && "min-w-36",
-                  isNumeric(column.kind) && "min-w-36 text-right",
-                  column.scope === "firm" && "min-w-32 max-w-36 whitespace-normal",
+                  "group/col relative sticky top-0 z-20 overflow-hidden border-b border-border bg-card px-2 py-2 text-left align-bottom text-[11px] font-medium tracking-widest text-muted-foreground uppercase",
+                  column.id === LABEL_COLUMN_ID && "left-0 z-30 border-r border-border-soft",
+                  isNumeric(column.kind) && "text-right",
+                  column.scope === "firm" && "whitespace-normal",
                   column.emphasis && "text-primary shadow-[inset_0_2px_0_var(--color-primary)]",
                 )}
               >
@@ -90,6 +100,14 @@ export function BoardTable({
                     </Button>
                   ) : null}
                 </div>
+                {canEdit ? (
+                  <ColumnResizeHandle
+                    label={column.name}
+                    width={widthOf(column)}
+                    onPointerDown={(event) => onPointerDown(column, event)}
+                    onResize={(width) => dispatch({ type: "set-column-width", boardId: board.id, columnId: column.id, width })}
+                  />
+                ) : null}
               </th>
             ))}
             {canEdit ? (
@@ -241,8 +259,8 @@ function GroupRows({
                     <td
                       key={column.id}
                       className={cn(
-                        "relative border-b border-border-soft bg-card px-1 py-1 group-hover:bg-bg-raised",
-                        column.id === LABEL_COLUMN_ID && "sticky left-0 z-10 min-w-56 border-r border-border-soft",
+                        "relative overflow-hidden border-b border-border-soft bg-card px-1 py-1 group-hover:bg-bg-raised",
+                        column.id === LABEL_COLUMN_ID && "sticky left-0 z-10 border-r border-border-soft",
                         column.emphasis && "bg-accent-wash group-hover:bg-accent-wash",
                       )}
                     >
