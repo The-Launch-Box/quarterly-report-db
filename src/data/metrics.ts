@@ -1,5 +1,5 @@
 import { formatCompactCurrency, formatCurrency, formatNumber, formatPercent } from "./format"
-import { LABEL_COLUMN_ID, type Board, type BoardGroup, type BoardRow, type Column, type Workspace } from "./types"
+import { EXPECTED_COLUMN_ID, LABEL_COLUMN_ID, type Board, type BoardGroup, type BoardRow, type Column, type Workspace } from "./types"
 
 export interface KpiResult {
   id: string
@@ -179,11 +179,13 @@ export function plotRows(board: Board, companyId: string, grain: "company" | "li
     for (const row of group.rows) {
       const label = (row.cells[LABEL_COLUMN_ID] ?? "").trim()
       if (lineFilter && label.toLowerCase() !== lineFilter.toLowerCase()) continue
+      const values: Record<string, number | null> = {}
+      for (const column of columns) values[column.id] = cellNumber(column, row, board.columns)
       plots.push({
         key: row.id,
         groupId: group.id,
         label: lineItemLabel(group.name, label, groups.length, Boolean(lineFilter)),
-        values: valuesFor([row]),
+        values,
       })
     }
   }
@@ -202,18 +204,43 @@ export function defaultBarColumnIds(board: Board): string[] {
   return columns.slice(0, 2).map((column) => column.id)
 }
 
+export function defaultChartGrain(board: Board): "company" | "line" {
+  // Firm totals of revenue goals collapse to the same dollars as YTD revenue.
+  if (board.id === "revenue") return "line"
+  return "company"
+}
+
 export function defaultPieColumnId(board: Board): string {
+  const columns = valueColumns(board)
   if (board.id === "headcount") {
-    const cost = board.columns.find((column) => column.id === "cost")
-    if (cost && isValueColumn(cost)) return cost.id
+    const forecast = columns.find((column) => column.id === "q4" && column.kind === "number")
+    if (forecast) return forecast.id
+    const count = columns.find((column) => column.kind === "number" && !column.formula)
+    if (count) return count.id
   }
-  const q4 = board.columns.find((column) => column.id === "q4" && isValueColumn(column))
+  if (board.id === "revenue") {
+    const expected = columns.find((column) => column.id === EXPECTED_COLUMN_ID)
+    if (expected) return expected.id
+  }
+  const q4 = columns.find((column) => column.id === "q4")
   if (q4) return q4.id
-  return valueColumns(board)[0]?.id ?? ""
+  return columns[0]?.id ?? ""
 }
 
 export function defaultScatterColumnIds(board: Board): [string, string] {
   const columns = valueColumns(board).filter((column) => !column.formula)
+  if (board.id === "headcount") {
+    const counts = columns.filter((column) => column.kind === "number")
+    const closed = counts.find((column) => column.id === "q3")?.id
+    const forecast = counts.find((column) => column.id === "q4")?.id
+    if (closed && forecast) return [closed, forecast]
+    return [counts[0]?.id ?? "", counts[1]?.id ?? counts[0]?.id ?? ""]
+  }
+  if (board.id === "revenue") {
+    const expected = columns.find((column) => column.id === EXPECTED_COLUMN_ID)?.id
+    const forecast = columns.find((column) => column.id === "q4")?.id
+    if (expected && forecast) return [expected, forecast]
+  }
   const q3 = columns.find((column) => column.id === "q3")?.id
   const q4 = columns.find((column) => column.id === "q4")?.id
   if (q3 && q4) return [q3, q4]

@@ -6,7 +6,19 @@ import { isAdminEmail, isLaunchboxEmail, launchboxEmailFromClaims } from "../src
 import { formatCurrency, parseNumber, parsePercentInput } from "../src/data/format"
 import { isExpired, SNAPSHOT_TTL_MS } from "../src/data/retention"
 import { publishWorkspace, readLiveSnapshot, saveSnapshot } from "../server/snapshots"
-import { aggregateColumn, cellNumber, computeKpis, defaultBarColumnIds, formatColumnValue, listCompanies, profitMarginChart } from "../src/data/metrics"
+import {
+  aggregateColumn,
+  cellNumber,
+  computeKpis,
+  defaultBarColumnIds,
+  defaultChartGrain,
+  defaultPieColumnId,
+  defaultScatterColumnIds,
+  formatColumnValue,
+  listCompanies,
+  plotRows,
+  profitMarginChart,
+} from "../src/data/metrics"
 import { parseWorkspace } from "../src/data/persist"
 import { keepFirmBoards, reducer } from "../src/data/reducer"
 import { commitHtml, editorHtml, sanitizeRichText } from "../src/data/rich-text"
@@ -257,6 +269,36 @@ for (const [offset, id] of firmRatioIds.entries()) {
 }
 if (headcount.columns.some((column) => column.scope === "firm")) throw new Error("headcount should not carry firm ratios")
 if (defaultBarColumnIds(ytd).join() !== "q3,q4") throw new Error("firm ratios should stay off the default chart")
+if (defaultPieColumnId(ytd) !== "q4" || defaultScatterColumnIds(ytd).join() !== "q3,q4") {
+  throw new Error("YTD charts should stay on the quarter columns")
+}
+if (defaultChartGrain(ytd) !== "company" || defaultChartGrain(headcount) !== "company") {
+  throw new Error("headcount and YTD charts should stay on firm totals")
+}
+if (defaultPieColumnId(headcount) !== "q4") throw new Error("headcount pie should plot forecast headcount")
+if (defaultScatterColumnIds(headcount).join() !== "q3,q4") throw new Error("headcount scatter should plot headcount, not pay")
+const headcountPlot = must(
+  plotRows(headcount, "echelon", "company", "").find((row) => row.groupId === "echelon"),
+  "echelon headcount plot",
+)
+if (headcountPlot.values.q4 !== 113) throw new Error(`headcount chart plotted ${headcountPlot.values.q4 ?? "nothing"}`)
+const revenueBoard = must(seed.boards.find((board) => board.id === "revenue"), "revenue board")
+if (defaultChartGrain(revenueBoard) !== "line") throw new Error("revenue goals should chart each row")
+if (defaultPieColumnId(revenueBoard) !== "expected") throw new Error("revenue goals pie should plot expected")
+if (defaultScatterColumnIds(revenueBoard).join() !== "expected,q4") {
+  throw new Error("revenue goals scatter should plot expected against the forecast")
+}
+const revenueLines = plotRows(revenueBoard, "all", "line", "")
+const chartPlan = revenueLines.find((row) => row.label.includes("2026 revenue"))
+if (!chartPlan || chartPlan.values.expected !== 8_100_000) throw new Error("revenue goals chart dropped the Improv plan")
+if (!revenueLines.some((row) => row.groupId === "echelon" && row.label.includes("New logos"))) {
+  throw new Error("revenue goals chart dropped motions")
+}
+const ytdRevenue = must(
+  ytd.groups.find((group) => group.id === "echelon")?.rows.find((row) => row.cells[LABEL_COLUMN_ID] === "Revenue"),
+  "echelon revenue line",
+)
+if (headcountPlot.values.q4 === Number(ytdRevenue.cells.q4)) throw new Error("headcount chart used YTD revenue")
 if (ytd.subtitle !== "") throw new Error("YTD financial results should have no subtitle")
 const noted = structuredClone(seed)
 const notedYtd = must(noted.boards.find((board) => board.id === "ytd"), "noted ytd")

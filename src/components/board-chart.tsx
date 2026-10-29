@@ -22,6 +22,7 @@ import { BRAND_MARK, BRAND_SERIES, portcoId } from "@/data/brands"
 import { formatNumber, shortName } from "@/data/format"
 import {
   defaultBarColumnIds,
+  defaultChartGrain,
   defaultLineFilter,
   defaultPieColumnId,
   defaultScatterColumnIds,
@@ -51,7 +52,7 @@ export function BoardChart({ board, companyId }: { board: Board; companyId: stri
   const columns = valueColumns(board).filter((column) => column.scope !== "firm")
   const marginsAvailable = board.id === "ytd"
   const [chartType, setChartType] = useState<ChartType>("bar")
-  const [grain, setGrain] = useState<Grain>("company")
+  const [grain, setGrain] = useState<Grain>(() => defaultChartGrain(board))
   const [lineFilter, setLineFilter] = useState(() => defaultLineFilter(board))
   const [barSelection, setBarSelection] = useState<string[]>(() => defaultBarColumnIds(board))
   const [pieId, setPieId] = useState(() => defaultPieColumnId(board))
