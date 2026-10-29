@@ -21,9 +21,11 @@ import {
 import { BRAND_MARK, BRAND_SERIES, portcoId } from "@/data/brands"
 import { formatNumber, shortName } from "@/data/format"
 import {
+  categoryBars,
   chartTables,
   defaultBarColumnIds,
   defaultChartGrain,
+  defaultChartTableId,
   defaultLineFilter,
   defaultPieColumnId,
   defaultScatterColumnIds,
@@ -37,6 +39,7 @@ import {
   type ChartTable,
   type PlotRow,
 } from "@/data/metrics"
+import { HEADCOUNT_MONTH_TABLE_ID } from "@/data/seed"
 import { STATEMENT_TABLE_ID } from "@/data/ytd-tables"
 import type { Board, Column, ColumnKind } from "@/data/types"
 import { Field, Segmented, Select } from "@/components/ui"
@@ -68,7 +71,10 @@ export function BoardChart({ board, companyId }: { board: Board; companyId: stri
   const [chartType, setChartType] = useState<ChartType>("bar")
   const [grain, setGrain] = useState<Grain>(() => defaultChartGrain(board))
   const [lineFilter, setLineFilter] = useState(() => defaultLineFilter(board))
-  const [picked, setPicked] = useState<string[]>(() => (tables[0] ? [tables[0].id] : []))
+  const [picked, setPicked] = useState<string[]>(() => {
+    const preferred = defaultChartTableId(board)
+    return preferred ? [preferred] : []
+  })
   const [choices, setChoices] = useState<Record<string, MetricChoice>>({})
 
   const plottable = tables.filter((table) => table.columns.some((column) => isValueColumn(column) && column.scope !== "firm"))
@@ -84,7 +90,9 @@ export function BoardChart({ board, companyId }: { board: Board; companyId: stri
   const selected = plottable.filter((table) => picked.includes(table.id))
   const shown = selected.length > 0 ? selected : plottable.slice(0, 1)
   const labels = [...new Set(shown.flatMap((table) => tableLabels(board, table.id)))]
-  const lineRequired = grain === "company" && shown.some((table) => !tableAggregates(board, table.id))
+  const rowBars = chartType === "bar" && shown.length > 0 && shown.every((table) => rowsAlongAxis(board, table))
+  const columnTables = shown.filter((table) => !(chartType === "bar" && rowsAlongAxis(board, table)))
+  const lineRequired = grain === "company" && columnTables.some((table) => !tableAggregates(board, table.id))
   const sharedLine = labels.includes(lineFilter) ? lineFilter : ""
 
   function toggleTable(tableId: string) {
@@ -108,7 +116,7 @@ export function BoardChart({ board, companyId }: { board: Board; companyId: stri
   return (
     <section className="rounded-lg border border-border bg-card px-5 py-5" aria-label="Graph">
       <h2 className="text-xl">{chartTitle(chartType)}</h2>
-      <p className="mt-1 text-sm text-muted-foreground">{chartDescription(chartType, grain, shown.length > 1)}</p>
+      <p className="mt-1 text-sm text-muted-foreground">{chartDescription(chartType, grain, shown, rowBars)}</p>
       <div className="mt-4 flex flex-wrap items-end gap-4">
         <Segmented
           label="Graph type"
@@ -121,7 +129,7 @@ export function BoardChart({ board, companyId }: { board: Board; companyId: stri
             ...(marginsAvailable ? [{ value: "margins" as const, label: "Profit margins", icon: LineChartIcon }] : []),
           ]}
         />
-        {chartType === "margins" ? null : (
+        {chartType === "margins" || columnTables.length === 0 ? null : (
           <Field label="Rows" htmlFor="chart-grain">
             <Select
               id="chart-grain"
@@ -135,7 +143,7 @@ export function BoardChart({ board, companyId }: { board: Board; companyId: stri
             />
           </Field>
         )}
-        {chartType === "margins" || (!lineRequired && grain !== "line") ? null : (
+        {chartType === "margins" || columnTables.length === 0 || (!lineRequired && grain !== "line") ? null : (
           <Field label="Line" htmlFor="chart-line">
             <Select
               id="chart-line"
@@ -195,16 +203,22 @@ export function BoardChart({ board, companyId }: { board: Board; companyId: stri
           {shown.map((table) => {
             const columns = metricColumns(table)
             const choice = choiceFor(table)
+            const byRow = chartType === "bar" && rowsAlongAxis(board, table)
             const line = lineFor(board, table, grain, lineFilter)
-            const allPlots = plotTable(board, table, companyId, grain, line)
+            const rowChart = byRow ? categoryBars(board, table, companyId, choice.bars) : null
+            const allPlots = byRow ? [] : plotTable(board, table, companyId, grain, line)
             const plots = allPlots.slice(0, 40)
-            const hidden = allPlots.length - plots.length
+            const hidden = byRow ? Math.max(0, (rowChart?.points.length ?? 0) - 40) : allPlots.length - plots.length
             return (
               <div key={table.id} className={chartType === "pie" ? "min-w-0" : "min-w-0"}>
                 {chartType === "pie" ? null : shown.length > 1 ? <h3 className="mb-2 text-base">{table.title}</h3> : null}
                 <div className={chartType === "pie" ? "min-w-0" : "h-[340px] w-full min-w-0"}>
                   {chartType === "bar" ? (
-                    <BarView companyId={companyId} plots={plots} columns={columns} barIds={choice.bars} />
+                    byRow ? (
+                      <CategoryBarView chart={rowChart} companyId={companyId} />
+                    ) : (
+                      <BarView companyId={companyId} plots={plots} columns={columns} barIds={choice.bars} />
+                    )
                   ) : chartType === "pie" ? (
                     <TableDonut
                       title={table.title}
@@ -310,6 +324,10 @@ function TableMetrics({
   )
 }
 
+function rowsAlongAxis(board: Parameters<typeof tableAggregates>[0], table: ChartTable): boolean {
+  return board.id === "headcount" && !tableAggregates(board, table.id)
+}
+
 function metricColumns(table: ChartTable): Column[] {
   return table.columns.filter((column) => isValueColumn(column) && column.scope !== "firm")
 }
@@ -346,6 +364,82 @@ function nextBars(columns: Column[], current: string[], column: Column, checked:
   if (!checked) return present.filter((id) => id !== column.id)
   const sameKind = present.filter((id) => columns.find((item) => item.id === id)?.kind === column.kind)
   return sameKind.includes(column.id) ? sameKind : [...sameKind, column.id]
+}
+
+function CategoryBarView({
+  chart,
+  companyId,
+}: {
+  chart: ReturnType<typeof categoryBars>
+  companyId: string
+}) {
+  const points = chart?.points.slice(0, 40) ?? []
+  if (!chart || chart.series.length === 0 || points.length === 0) {
+    return <EmptyPlot message="This table has no numbers yet." />
+  }
+  const data = points.map((point) => {
+    const row: { label: string; [key: string]: string | number | null } = { label: point.label }
+    for (const series of chart.series) row[series.id] = point.values[series.id] ?? null
+    return row
+  })
+  const months = data.every((row) => monthTick(row.label) !== null)
+  const tilt = !months && (data.length > 8 || data.some((row) => row.label.length > 14))
+  const kind = chart.column.kind
+
+  return (
+    <ResponsiveContainer width="100%" height="100%">
+      <BarChart data={data} margin={{ top: 8, right: 8, left: 8, bottom: 8 }}>
+        <CartesianGrid stroke="var(--color-border)" strokeDasharray="3 3" />
+        <XAxis
+          dataKey="label"
+          interval={0}
+          angle={tilt ? -28 : 0}
+          textAnchor={tilt ? "end" : "middle"}
+          height={tilt ? 72 : 32}
+          tickFormatter={(value: string | number) => monthTick(String(value)) ?? shortName(String(value))}
+          stroke="var(--color-muted-foreground)"
+          tick={{ fill: "var(--color-muted-foreground)", fontSize: 11 }}
+        />
+        <YAxis
+          width={56}
+          allowDecimals={kind !== "number"}
+          stroke="var(--color-muted-foreground)"
+          tick={{ fill: "var(--color-muted-foreground)", fontSize: 11 }}
+          tickFormatter={(value: number) => axisTick(kind, value)}
+        />
+        <Tooltip content={<SeriesTooltip columns={[chart.column]} valueColumn={chart.column} />} />
+        {chart.series.length > 1 ? (
+          <Legend formatter={(value) => <span className="text-xs text-muted-foreground">{String(value)}</span>} />
+        ) : null}
+        {chart.series.map((series, index) => (
+          <Bar
+            key={series.id}
+            dataKey={series.id}
+            name={series.name}
+            fill={markColor(series.groupId, index, companyId)}
+            radius={[4, 4, 0, 0]}
+            maxBarSize={42}
+            animationDuration={180}
+          >
+            {chart.series.length === 1
+              ? data.map((entry, entryIndex) => (
+                  <Cell key={`${entry.label}-${entryIndex}`} fill={markColor(series.groupId, entryIndex, companyId)} />
+                ))
+              : null}
+          </Bar>
+        ))}
+      </BarChart>
+    </ResponsiveContainer>
+  )
+}
+
+function monthTick(label: string): string | null {
+  const match = /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+(\d{4})$/i.exec(label.trim())
+  const month = match?.[1]
+  const year = match?.[2]
+  if (!month || !year) return null
+  const short = month.slice(0, 3)
+  return `${short[0]?.toUpperCase() ?? ""}${short.slice(1).toLowerCase()} '${year.slice(2)}`
 }
 
 function BarView({
@@ -721,7 +815,8 @@ function chartTitle(chartType: ChartType): string {
   return "Scatterplot"
 }
 
-function chartDescription(chartType: ChartType, grain: Grain, several: boolean): string {
+function chartDescription(chartType: ChartType, grain: Grain, shown: ChartTable[], rowAxis: boolean): string {
+  const several = shown.length > 1
   if (chartType === "margins") return "Gross margin and profit margin from the financial results."
   if (chartType === "pie") {
     return several
@@ -730,6 +825,14 @@ function chartDescription(chartType: ChartType, grain: Grain, several: boolean):
   }
   if (chartType === "scatter") {
     return several ? "Each table has its own scatterplot. Choose both axes." : "Choose a table, then the metrics for both axes."
+  }
+  if (rowAxis) {
+    if (shown.length === 1 && shown[0]?.id === HEADCOUNT_MONTH_TABLE_ID) {
+      return "Months run along the bottom. Headcount is the height."
+    }
+    return several
+      ? "Each table has its own bar graph. Rows run along the bottom."
+      : "Rows run along the bottom. The checked metric is the height."
   }
   if (grain === "line") {
     return several ? "Each table has its own bar graph. Checked metrics share one column type." : "Each bar is a row. Check the metrics to plot."

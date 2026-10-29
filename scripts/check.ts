@@ -16,10 +16,12 @@ import { publishWorkspace, readLiveSnapshot, saveSnapshot } from "../server/snap
 import {
   aggregateColumn,
   cellNumber,
+  categoryBars,
   chartTables,
   computeKpis,
   defaultBarColumnIds,
   defaultChartGrain,
+  defaultChartTableId,
   defaultPieColumnId,
   headcountMix,
   defaultScatterColumnIds,
@@ -652,6 +654,23 @@ const monthTable = must(chartTables(headcount).find((table) => table.title === "
 const monthPlot = plotTable(headcount, monthTable, "improv", "line", "")
 if (monthPlot[0]?.label !== "Aug 2025" || monthPlot[0]?.values.count !== 30 || monthPlot.at(-1)?.values.count !== 32) {
   throw new Error("month chart did not read Month by Month")
+}
+if (defaultChartTableId(headcount) !== HEADCOUNT_MONTH_TABLE_ID) throw new Error("headcount graph should open on Month by Month")
+const monthBars = must(categoryBars(headcount, monthTable, "improv", ["count"]), "month bars")
+if (monthBars.column.name !== "Headcount" || monthBars.series.map((series) => series.name).join() !== "Headcount") {
+  throw new Error("month bars should use headcount as the height")
+}
+if (monthBars.points[0]?.label !== "Aug 2025" || monthBars.points[0]?.values.count !== 30 || monthBars.points.at(-1)?.label !== "Aug 2026" || monthBars.points.at(-1)?.values.count !== 32) {
+  throw new Error("month bars should put months on the x-axis")
+}
+if (monthBars.points.length !== 13) throw new Error("month bars dropped a month")
+const allMonthBars = must(categoryBars(headcount, monthTable, "all", ["count"]), "all-firm month bars")
+if (allMonthBars.series.length !== 1 || allMonthBars.series[0]?.id !== "improv" || allMonthBars.points[0]?.values.improv !== 30) {
+  throw new Error("firms without a headcount should stay off the month chart")
+}
+const terminationBars = must(categoryBars(headcount, terminationTable, "improv", ["share"]), "termination bars")
+if (terminationBars.points[0]?.label !== "Involuntary Termination" || terminationBars.points[0]?.values.share !== 0.7) {
+  throw new Error("termination bars did not use that table")
 }
 const ytdTables = chartTables(ytd).map((table) => table.title)
 if (ytdTables[0] !== "Financial results" || !ytdTables.includes("Ratios")) throw new Error("YTD charts missed a table")

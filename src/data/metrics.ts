@@ -1,5 +1,5 @@
 import { formatCompactCurrency, formatCurrency, formatNumber, formatPercent } from "./format"
-import { HEADCOUNT_TERMINATION_TABLE_ID, HEADCOUNT_TENURE_TABLE_ID } from "./seed"
+import { HEADCOUNT_MONTH_TABLE_ID, HEADCOUNT_TERMINATION_TABLE_ID, HEADCOUNT_TENURE_TABLE_ID } from "./seed"
 import { EXPECTED_COLUMN_ID, LABEL_COLUMN_ID, type Board, type BoardGroup, type BoardRow, type Column, type Workspace } from "./types"
 import { RATIO_COLUMNS, RATIOS_TABLE_ID, STATEMENT_TABLE_ID, ytdSectionOrder, ytdSectionTitle } from "./ytd-tables"
 
@@ -286,6 +286,83 @@ export function defaultBarColumnIds(board: Board): string[] {
   const q4 = columns.find((column) => column.id === "q4")
   if (q3 && q4 && q3.kind === q4.kind) return [q3.id, q4.id]
   return columns.slice(0, 2).map((column) => column.id)
+}
+
+/** The table a board's graph opens on. Headcount opens on Month by Month. */
+export function defaultChartTableId(board: Board): string {
+  const tables = chartTables(board)
+  if (board.id === "headcount") {
+    const months = tables.find((table) => table.id === HEADCOUNT_MONTH_TABLE_ID)
+    if (months) return months.id
+  }
+  return tables[0]?.id ?? ""
+}
+
+export interface CategoryBarSeries {
+  id: string
+  name: string
+  groupId: string
+}
+
+export interface CategoryBars {
+  column: Column
+  series: CategoryBarSeries[]
+  points: { label: string; values: Record<string, number | null> }[]
+}
+
+/**
+ * Bar chart of one table's rows. One firm uses the checked metrics as series.
+ * Several firms use one metric, with a series per firm that has a number.
+ */
+export function categoryBars(board: Board, table: ChartTable, companyId: string, columnIds: readonly string[]): CategoryBars | null {
+  const columns = columnIds.flatMap((id) => {
+    const column = table.columns.find((item) => item.id === id && isValueColumn(item))
+    return column ? [column] : []
+  })
+  const column = columns[0]
+  if (!column) return null
+  const groups = companyId === "all" ? board.groups : board.groups.filter((group) => group.id === companyId)
+  const points: CategoryBars["points"] = []
+  const indexByLabel = new Map<string, number>()
+
+  function pointFor(label: string): CategoryBars["points"][number] {
+    const existing = indexByLabel.get(label)
+    if (existing !== undefined) return points[existing] ?? { label, values: {} }
+    const created = { label, values: {} }
+    indexByLabel.set(label, points.length)
+    points.push(created)
+    return created
+  }
+
+  if (groups.length <= 1) {
+    const group = groups[0]
+    if (group) {
+      for (const row of rowsForTable(group, table.id)) {
+        const label = (row.cells[LABEL_COLUMN_ID] ?? "").trim()
+        if (!label) continue
+        const point = pointFor(label)
+        for (const metric of columns) point.values[metric.id] = cellNumber(metric, row, table.columns)
+      }
+    }
+    const series = columns
+      .filter((metric) => points.some((point) => typeof point.values[metric.id] === "number"))
+      .map((metric) => ({ id: metric.id, name: metric.name, groupId: group?.id ?? "" }))
+    return { column, series, points }
+  }
+
+  for (const group of groups) {
+    for (const row of rowsForTable(group, table.id)) {
+      const label = (row.cells[LABEL_COLUMN_ID] ?? "").trim()
+      if (!label) continue
+      const point = pointFor(label)
+      const value = cellNumber(column, row, table.columns)
+      if (typeof value === "number") point.values[group.id] = value
+    }
+  }
+  const series = groups
+    .filter((group) => points.some((point) => typeof point.values[group.id] === "number"))
+    .map((group) => ({ id: group.id, name: group.name, groupId: group.id }))
+  return { column, series, points }
 }
 
 export function defaultChartGrain(board: Board): "company" | "line" {
