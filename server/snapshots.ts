@@ -7,6 +7,7 @@ import {
   createSeedWorkspace,
   withExpectedColumn,
   withFirmRatios,
+  withHeadcountMix,
   withImprovDeck,
   withoutRetiredStatuses,
   withoutYtdSubtitle,
@@ -39,7 +40,7 @@ export function currentBoard(dir: string, now = Date.now()): BoardPayload {
     savedAt: live.savedAt,
     savedBy: live.savedBy,
     expiresAt: null,
-    workspace: withoutRetiredStatuses(withoutYtdSubtitle(withFirmRatios(withImprovDeck(live.workspace)))),
+    workspace: withoutRetiredStatuses(withoutYtdSubtitle(withHeadcountMix(withFirmRatios(withImprovDeck(live.workspace))))),
   }
 }
 
@@ -122,7 +123,7 @@ function readSnapshotFile(file: string): StoredSnapshot | null {
     return {
       savedAt: value.savedAt,
       savedBy: value.savedBy,
-      workspace: withoutRetiredStatuses(withoutYtdSubtitle(withFirmRatios(withExpectedColumn(workspace)))),
+      workspace: withoutRetiredStatuses(withoutYtdSubtitle(withHeadcountMix(withFirmRatios(withExpectedColumn(workspace))))),
     }
   } catch {
     return null

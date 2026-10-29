@@ -492,17 +492,27 @@ const IMPROV_CENSUS: readonly (readonly [string, number])[] = [
   ["2023 headcount", 5],
 ]
 
+const HEADCOUNT_MIX: readonly { mix: "termination" | "tenure"; name: string; legacy: string }[] = [
+  { mix: "termination", name: "Involuntary Termination", legacy: "Involuntary termination %" },
+  { mix: "termination", name: "Voluntary Unspecified", legacy: "Voluntary unspecified %" },
+  { mix: "termination", name: "Non-Regrettable", legacy: "Non-regrettable %" },
+  { mix: "termination", name: "Regrettable", legacy: "Regrettable %" },
+  { mix: "tenure", name: "1-3 years", legacy: "Tenure 1-3 years %" },
+  { mix: "tenure", name: "6 months - 1 year", legacy: "Tenure 6 months-1 year %" },
+  { mix: "tenure", name: "< 6 months", legacy: "Tenure under 6 months %" },
+]
+
 const IMPROV_TERMINATIONS: readonly (readonly [string, number])[] = [
-  ["Involuntary termination %", 70],
-  ["Voluntary unspecified %", 15],
-  ["Non-regrettable %", 10],
-  ["Regrettable %", 5],
+  ["Involuntary Termination", 70],
+  ["Voluntary Unspecified", 15],
+  ["Non-Regrettable", 10],
+  ["Regrettable", 5],
 ]
 
 const IMPROV_TENURE: readonly (readonly [string, number])[] = [
-  ["Tenure 1-3 years %", 40],
-  ["Tenure 6 months-1 year %", 30],
-  ["Tenure under 6 months %", 20],
+  ["1-3 years", 40],
+  ["6 months - 1 year", 30],
+  ["< 6 months", 20],
 ]
 
 const IMPROV_PLAN: readonly (readonly [string, number])[] = [
@@ -553,8 +563,8 @@ function improvHeadcountGroup(): BoardGroup {
       ...IMPROV_HEADCOUNT.map(([label, count]) => headcountFact(`improv-${slug(label)}`, label, count, false)),
       ...IMPROV_CENSUS.map(([label, count]) => headcountFact(`improv-census-${slug(label)}`, label, count, false)),
       headcountFact("improv-turnover", "Total turnover (61%)", 20, false),
-      ...IMPROV_TERMINATIONS.map(([label, count]) => headcountFact(`improv-${slug(label)}`, label, count, false)),
-      ...IMPROV_TENURE.map(([label, count]) => headcountFact(`improv-${slug(label)}`, label, count, false)),
+      ...IMPROV_TERMINATIONS.map(([label, percent]) => mixStat(`improv-${slug(label)}`, label, "termination", percent)),
+      ...IMPROV_TENURE.map(([label, percent]) => mixStat(`improv-${slug(label)}`, label, "tenure", percent)),
     ],
   }
 }
@@ -654,6 +664,76 @@ function closedMoneyRow(id: string, label: string, quarters: readonly [number, n
   }
 }
 
+/** Blank termination and tenure rows for a firm's headcount table. The pies read these rows. */
+export function headcountMixRows(groupId: string): BoardRow[] {
+  return HEADCOUNT_MIX.map((line) => mixStat(`${groupId}-${slug(line.name)}`, line.name, line.mix, null))
+}
+
+/** Turns older percent rows, stored as 70, into the table rows the pies read. */
+export function withHeadcountMix(workspace: Workspace): Workspace {
+  let changed = false
+  const boards = workspace.boards.map((board) => {
+    if (board.id !== "headcount") return board
+    let boardChanged = false
+    const groups = board.groups.map((group) => {
+      const next = ensureMixRows(group)
+      if (next === group) return group
+      boardChanged = true
+      return next
+    })
+    if (!boardChanged) return board
+    changed = true
+    return { ...board, groups }
+  })
+  return changed ? { ...workspace, boards } : workspace
+}
+
+function ensureMixRows(group: BoardGroup): BoardGroup {
+  let changed = false
+  const rows = group.rows.map((row) => {
+    const legacy = HEADCOUNT_MIX.find((line) => row.cells[LABEL_COLUMN_ID] === line.legacy)
+    if (!legacy) return row
+    changed = true
+    return convertMixRow(row, legacy)
+  })
+  const hasMix = rows.some((row) => row.mix === "termination" || row.mix === "tenure")
+  if (!hasMix) return { ...group, rows: [...rows, ...headcountMixRows(group.id)] }
+  if (!changed) return group
+  return { ...group, rows }
+}
+
+function convertMixRow(row: BoardRow, line: (typeof HEADCOUNT_MIX)[number]): BoardRow {
+  return {
+    ...row,
+    mix: line.mix,
+    measure: "percent",
+    omitFromRollup: true,
+    cells: {
+      ...row.cells,
+      [LABEL_COLUMN_ID]: line.name,
+      ...ratioCell(row.cells.q3, "q3"),
+      ...ratioCell(row.cells[EXPECTED_COLUMN_ID], EXPECTED_COLUMN_ID),
+    },
+  }
+}
+
+function ratioCell(raw: string | undefined, key: string): Record<string, string> {
+  if (!raw) return {}
+  const value = Number(raw)
+  if (!Number.isFinite(value) || value === 0) return { [key]: raw }
+  return { [key]: String(Math.abs(value) > 1 ? value / 100 : value) }
+}
+
+function mixStat(id: string, label: string, mix: "termination" | "tenure", percent: number | null): BoardRow {
+  const cells: Record<string, string> = { [LABEL_COLUMN_ID]: label }
+  if (percent !== null) {
+    const stored = String(percent / 100)
+    cells.q3 = stored
+    cells[EXPECTED_COLUMN_ID] = stored
+  }
+  return { id, mix, measure: "percent", omitFromRollup: true, cells }
+}
+
 function headcountFact(id: string, label: string, count: number, rollup: boolean): BoardRow {
   const row: BoardRow = {
     id,
@@ -702,24 +782,27 @@ function headcountGroup(portco: PortcoSeed): BoardGroup {
   return {
     id: portco.id,
     name: portco.name,
-    rows: ROLES.map((role, index) => {
-      const counts = portco.headcount[index] ?? [0, 0, 0]
-      const q3 = counts[0] ?? 0
-      const plan = counts[1] ?? 0
-      const forecast = counts[2] ?? 0
-      return {
-        id: `${portco.id}-${role.name.toLowerCase().replace(/\s+/g, "-")}`,
-        cells: {
-          [LABEL_COLUMN_ID]: role.name,
-          [EXPECTED_COLUMN_ID]: String(plan),
-          q3: String(q3),
-          q4plan: String(plan),
-          q4: String(forecast),
-          rate: String(role.rate),
-          status: varianceStatus(forecast, plan),
-        },
-      }
-    }),
+    rows: [
+      ...ROLES.map((role, index) => {
+        const counts = portco.headcount[index] ?? [0, 0, 0]
+        const q3 = counts[0] ?? 0
+        const plan = counts[1] ?? 0
+        const forecast = counts[2] ?? 0
+        return {
+          id: `${portco.id}-${role.name.toLowerCase().replace(/\s+/g, "-")}`,
+          cells: {
+            [LABEL_COLUMN_ID]: role.name,
+            [EXPECTED_COLUMN_ID]: String(plan),
+            q3: String(q3),
+            q4plan: String(plan),
+            q4: String(forecast),
+            rate: String(role.rate),
+            status: varianceStatus(forecast, plan),
+          },
+        }
+      }),
+      ...headcountMixRows(portco.id),
+    ],
   }
 }
 

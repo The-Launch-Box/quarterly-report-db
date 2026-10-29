@@ -68,6 +68,8 @@ export interface BoardRow {
   omitFromRollup?: boolean
   /** Show the money columns as a percent or a plain number, and keep YTD as its own figure. */
   measure?: "percent" | "number"
+  /** Headcount pie this row feeds. The slice name is the row label, and the share is Q3 close. */
+  mix?: "termination" | "tenure"
   /** One level of nested rows on a firm board. Hidden until that row is expanded. */
   subrows?: BoardRow[]
 }

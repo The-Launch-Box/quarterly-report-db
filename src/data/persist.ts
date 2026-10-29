@@ -247,6 +247,8 @@ function readRow(value: unknown, nested: boolean): BoardRow | null {
   const row: BoardRow = { id: value.id, cells }
   if (value.omitFromRollup === true) row.omitFromRollup = true
   if (value.measure === "percent" || value.measure === "number") row.measure = value.measure
+  if (value.mix !== undefined && value.mix !== "termination" && value.mix !== "tenure") return null
+  if (value.mix === "termination" || value.mix === "tenure") row.mix = value.mix
   if (value.subrows !== undefined) {
     if (nested || !Array.isArray(value.subrows)) return null
     const subrows: BoardRow[] = []

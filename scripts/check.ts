@@ -26,7 +26,7 @@ import {
 import { parseWorkspace } from "../src/data/persist"
 import { keepFirmBoards, reducer } from "../src/data/reducer"
 import { commitHtml, editorHtml, sanitizeRichText } from "../src/data/rich-text"
-import { createSeedWorkspace, IMPROV_OPERATING_RESULTS, seedProblems, varianceStatus, withExpectedColumn, withFirmRatios, withImprovDeck, withoutRetiredStatuses, withoutYtdSubtitle } from "../src/data/seed"
+import { createSeedWorkspace, IMPROV_OPERATING_RESULTS, seedProblems, varianceStatus, withExpectedColumn, withFirmRatios, withHeadcountMix, withImprovDeck, withoutRetiredStatuses, withoutYtdSubtitle } from "../src/data/seed"
 import { EXPECTED_COLUMN_ID, LABEL_COLUMN_ID, MAX_COLUMN_WIDTH, type Board, type Column, type Workspace } from "../src/data/types"
 import { RATIOS_TABLE_ID, STATEMENT_TABLE_ID, ytdSectionOrder } from "../src/data/ytd-tables"
 
@@ -572,27 +572,99 @@ if (improvMix.termination.map((slice) => slice.color).join() !== "#70ad47,#e04b4
 }
 const allMix = must(headcountMix(headcount, "all"), "all-firms mix")
 if (allMix.termination[0]?.value !== 70 || allMix.tenure.length !== 3) throw new Error("all firms should use the Improv mix")
-if (headcountMix(headcount, "echelon") !== null) throw new Error("echelon received a termination mix")
+if (headcountMix(headcount, "echelon") !== null) throw new Error("blank echelon mix rows drew a pie")
+const echelonTerm = must(
+  headcount.groups.find((group) => group.id === "echelon")?.rows.find((row) => row.cells[LABEL_COLUMN_ID] === "Involuntary Termination"),
+  "echelon termination row",
+)
+if (echelonTerm.mix !== "termination" || echelonTerm.measure !== "percent" || echelonTerm.cells.q3) {
+  throw new Error("echelon is missing a blank termination row")
+}
 if (headcountMix(must(seed.boards.find((board) => board.id === "ytd"), "ytd for mix"), "improv") !== null) {
   throw new Error("YTD received a headcount mix")
 }
 const tenureRow = must(
-  headcount.groups.find((group) => group.id === "improv")?.rows.find((row) => row.cells[LABEL_COLUMN_ID] === "Tenure 1-3 years %"),
+  headcount.groups.find((group) => group.id === "improv")?.rows.find((row) => row.cells[LABEL_COLUMN_ID] === "1-3 years"),
   "tenure row",
 )
+if (tenureRow.mix !== "tenure" || tenureRow.measure !== "percent" || tenureRow.cells.q3 !== "0.4") {
+  throw new Error("length of service is not a percent row in the table")
+}
 const editedTenure = reducer(seed, {
   type: "set-cell",
   boardId: "headcount",
   groupId: "improv",
   rowId: tenureRow.id,
   columnId: "q3",
-  value: "55",
+  value: "0.55",
 })
 const editedMix = must(
   headcountMix(must(editedTenure.boards.find((board) => board.id === "headcount"), "edited headcount"), "improv"),
   "edited mix",
 )
-if (editedMix.tenure[0]?.value !== 55) throw new Error("length of service did not follow the cell")
+if (editedMix.tenure[0]?.value !== 55 || editedMix.tenure[0]?.label !== "1-3 years") {
+  throw new Error("length of service did not follow the table")
+}
+const termRow = must(
+  headcount.groups.find((group) => group.id === "improv")?.rows.find((row) => row.mix === "termination"),
+  "termination row",
+)
+const renamedMix = reducer(seed, {
+  type: "set-cell",
+  boardId: "headcount",
+  groupId: "improv",
+  rowId: termRow.id,
+  columnId: LABEL_COLUMN_ID,
+  value: "Let go",
+})
+const renamedSlice = headcountMix(
+  must(renamedMix.boards.find((board) => board.id === "headcount"), "renamed headcount"),
+  "improv",
+)?.termination[0]
+if (renamedSlice?.label !== "Let go") throw new Error("the pie did not use the table label")
+const staleMix = structuredClone(seed)
+const staleMixImprov = must(
+  staleMix.boards.find((board) => board.id === "headcount")?.groups.find((group) => group.id === "improv"),
+  "stale mix improv",
+)
+const staleTerm = must(
+  staleMixImprov.rows.find((row) => row.cells[LABEL_COLUMN_ID] === "Involuntary Termination"),
+  "stale termination",
+)
+staleTerm.cells[LABEL_COLUMN_ID] = "Involuntary termination %"
+staleTerm.cells.q3 = "70"
+staleTerm.cells[EXPECTED_COLUMN_ID] = "70"
+delete staleTerm.mix
+delete staleTerm.measure
+const staleEchelon = must(
+  staleMix.boards.find((board) => board.id === "headcount")?.groups.find((group) => group.id === "echelon"),
+  "stale echelon",
+)
+staleEchelon.rows = staleEchelon.rows.filter((row) => !row.mix)
+const migratedMix = withHeadcountMix(staleMix)
+const migratedTerm = must(
+  migratedMix.boards
+    .find((board) => board.id === "headcount")
+    ?.groups.find((group) => group.id === "improv")
+    ?.rows.find((row) => row.cells[LABEL_COLUMN_ID] === "Involuntary Termination"),
+  "migrated termination",
+)
+if (migratedTerm.mix !== "termination" || migratedTerm.measure !== "percent" || migratedTerm.cells.q3 !== "0.7") {
+  throw new Error("an old termination percent was not moved into the table")
+}
+const migratedEchelon = migratedMix.boards
+  .find((board) => board.id === "headcount")
+  ?.groups.find((group) => group.id === "echelon")
+  ?.rows.find((row) => row.cells[LABEL_COLUMN_ID] === "Involuntary Termination")
+if (!migratedEchelon || migratedEchelon.cells.q3) throw new Error("a firm without a mix did not gain blank rows")
+if (withHeadcountMix(migratedMix) !== migratedMix) throw new Error("headcount mix migration ran twice")
+if (withHeadcountMix(seed) !== seed) throw new Error("current headcount mix was rewritten")
+const addedMixFirm = reducer(seed, { type: "add-company", name: "Northwind Mix" })
+const addedMixRow = addedMixFirm.boards
+  .find((board) => board.id === "headcount")
+  ?.groups.find((group) => group.name === "Northwind Mix")
+  ?.rows.find((row) => row.mix === "tenure" && row.cells[LABEL_COLUMN_ID] === "1-3 years")
+if (!addedMixRow) throw new Error("a new firm did not get length of service rows")
 if (defaultScatterColumnIds(headcount).join() !== "q3,q4") throw new Error("headcount scatter should plot headcount, not pay")
 const headcountPlot = must(
   plotRows(headcount, "echelon", "company", "").find((row) => row.groupId === "echelon"),

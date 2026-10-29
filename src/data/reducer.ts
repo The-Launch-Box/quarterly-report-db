@@ -1,5 +1,5 @@
 import { listCompanies } from "./metrics"
-import { firmRatioRows } from "./seed"
+import { firmRatioRows, headcountMixRows } from "./seed"
 import {
   LABEL_COLUMN_ID,
   MAX_COLUMN_WIDTH,
@@ -476,7 +476,10 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
                   {
                     id: groupId,
                     name,
-                    rows: [{ id: crypto.randomUUID(), cells: { [LABEL_COLUMN_ID]: "New line" } }],
+                    rows: [
+                      { id: crypto.randomUUID(), cells: { [LABEL_COLUMN_ID]: "New line" } },
+                      ...(board.id === "headcount" ? headcountMixRows(groupId) : []),
+                    ],
                     ...(board.id === "ytd"
                       ? { ratios: firmRatioRows(groupId), ...(customRows ? { customRows } : {}) }
                       : {}),
