@@ -123,6 +123,8 @@ export interface Board {
   columns: Column[]
   groups: BoardGroup[]
   kpis: KpiDef[]
+  /** Hide the summary tiles under the title. The definitions stay, so they can come back. */
+  kpisHidden?: boolean
   /** Each firm on YTD has its ratio table. A later delete of one of those rows stays deleted. */
   ratioTable?: boolean
   /** The ratios were briefly stored as income-statement rows. Those saves still load, then move into the table. */

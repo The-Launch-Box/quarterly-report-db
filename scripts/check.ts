@@ -1183,6 +1183,26 @@ if (
   throw new Error("a numeric text body was accepted")
 }
 
+if (seed.boards.find((board) => board.id === "revenue")?.kpisHidden) throw new Error("tiles start hidden")
+const hiddenTiles = reducer(seed, { type: "set-kpis-hidden", boardId: "revenue", hidden: true })
+if (hiddenTiles.boards.find((board) => board.id === "revenue")?.kpisHidden !== true) throw new Error("tiles were not hidden")
+if (hiddenTiles.boards.find((board) => board.id === "headcount")?.kpisHidden) throw new Error("hiding tiles changed another board")
+if (reducer(hiddenTiles, { type: "set-kpis-hidden", boardId: "revenue", hidden: true }) !== hiddenTiles) {
+  throw new Error("hiding tiles again changed the board")
+}
+const shownTiles = reducer(hiddenTiles, { type: "set-kpis-hidden", boardId: "revenue", hidden: false })
+if (shownTiles.boards.find((board) => board.id === "revenue")?.kpisHidden) throw new Error("tiles stayed hidden")
+if (reducer(seed, { type: "set-kpis-hidden", boardId: "missing", hidden: true }) !== seed) {
+  throw new Error("a missing board hid its tiles")
+}
+const firmTiles = reducer(seed, { type: "add-board", boardId: "board-tiles", firmId: "improv", title: "Tiles" })
+if (reducer(firmTiles, { type: "set-kpis-hidden", boardId: "board-tiles", hidden: true }) !== firmTiles) {
+  throw new Error("a board without tiles hid them")
+}
+const roundTiles = must(parseWorkspace(JSON.parse(JSON.stringify(hiddenTiles)) as unknown), "hidden tiles round trip")
+const roundRevenue = must(roundTiles.boards.find((board) => board.id === "revenue"), "hidden revenue")
+if (roundRevenue.kpisHidden !== true || roundRevenue.kpis.length !== 3) throw new Error("hidden tiles dropped on save")
+
 console.log("ok")
 
 function stripExpected(workspace: Workspace): Workspace {

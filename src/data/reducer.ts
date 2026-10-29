@@ -57,6 +57,7 @@ export type WorkspaceAction =
   | { type: "set-firm-metric"; boardId: string; groupId: string; columnId: string; value: string }
   | { type: "add-board"; boardId: string; firmId: string; title: string }
   | { type: "rename-board"; boardId: string; title: string }
+  | { type: "set-kpis-hidden"; boardId: string; hidden: boolean }
   | { type: "set-board-subtitle"; boardId: string; subtitle: string }
   | { type: "delete-board"; boardId: string }
   | { type: "replace"; workspace: Workspace }
@@ -525,6 +526,16 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
       const board = workspace.boards.find((item) => item.id === action.boardId)
       if (!board || board.title === title) return workspace
       return mapBoard(workspace, action.boardId, (current) => ({ ...current, title }))
+    }
+    case "set-kpis-hidden": {
+      const board = workspace.boards.find((item) => item.id === action.boardId)
+      if (!board || board.kpis.length === 0 || (board.kpisHidden === true) === action.hidden) return workspace
+      return mapBoard(workspace, action.boardId, (current) => {
+        const next = { ...current }
+        if (action.hidden) next.kpisHidden = true
+        else delete next.kpisHidden
+        return next
+      })
     }
     case "set-board-subtitle": {
       const subtitle = action.subtitle.trim().replace(/\s+/g, " ")

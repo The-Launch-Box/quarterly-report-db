@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
 import { useParams } from "react-router"
-import { BarChart3, Columns2, Plus, RotateCcw, Table2 } from "lucide-react"
+import { BarChart3, Columns2, PanelTop, Plus, RotateCcw, Table2 } from "lucide-react"
 
 import { BoardChart } from "@/components/board-chart"
 import { BoardTitle } from "@/components/board-title"
@@ -110,6 +110,15 @@ function BoardScreen({ boardId }: { boardId: string }) {
               <Plus />
               Add firm
             </Button>
+            {board.kpis.length > 0 ? (
+              <Button
+                variant="outline"
+                onClick={() => dispatch({ type: "set-kpis-hidden", boardId, hidden: board.kpisHidden !== true })}
+              >
+                <PanelTop />
+                {board.kpisHidden ? "Add tiles" : "Remove tiles"}
+              </Button>
+            ) : null}
             <Button variant="ghost" onClick={() => setPending({ kind: "reset" })}>
               <RotateCcw />
               Reset boards
@@ -118,11 +127,13 @@ function BoardScreen({ boardId }: { boardId: string }) {
         ) : null}
       </header>
 
-      <section className={cn("grid gap-3 sm:grid-cols-2", kpis.length >= 4 ? "xl:grid-cols-4" : "xl:grid-cols-3")}>
-        {kpis.map((kpi) => (
-          <KpiCard key={kpi.id} label={kpi.label} value={kpi.value} delta={kpi.deltaPct} compareLabel={kpi.compareLabel} />
-        ))}
-      </section>
+      {!board.kpisHidden && kpis.length > 0 ? (
+        <section className={cn("grid gap-3 sm:grid-cols-2", kpis.length >= 4 ? "xl:grid-cols-4" : "xl:grid-cols-3")}>
+          {kpis.map((kpi) => (
+            <KpiCard key={kpi.id} label={kpi.label} value={kpi.value} delta={kpi.deltaPct} compareLabel={kpi.compareLabel} />
+          ))}
+        </section>
+      ) : null}
 
       {board.id === "ytd" ? (
         <YtdOperatingResults
