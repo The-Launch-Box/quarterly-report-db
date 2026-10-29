@@ -4,6 +4,7 @@ import { BarChart3, Columns2, Plus, RotateCcw, Table2 } from "lucide-react"
 
 import { BoardChart } from "@/components/board-chart"
 import { BoardTable } from "@/components/board-table"
+import { CustomBoardScreen } from "@/components/custom-board"
 import { YtdOperatingResults } from "@/components/operating-results"
 import { Button, ConfirmDialog, Field, Input, KpiCard, Modal, Segmented, Select } from "@/components/ui"
 import { computeKpis, listCompanies } from "@/data/metrics"
@@ -40,11 +41,12 @@ export function BoardPage() {
     return (
       <header>
         <h1 className="text-4xl leading-none">Board not found</h1>
-        <p className="mt-2 text-sm text-muted-foreground">Open YTD financial results, headcount, or revenue goals.</p>
+        <p className="mt-2 text-sm text-muted-foreground">Open a board from the list.</p>
       </header>
     )
   }
 
+  if (board.firmId) return <CustomBoardScreen key={board.id} boardId={board.id} />
   return <BoardScreen key={board.id} boardId={board.id} />
 }
 
@@ -268,8 +270,12 @@ function pendingTitle(pending: Pending): string {
 }
 
 function pendingDescription(pending: Pending): string {
-  if (pending?.kind === "reset") return "Restores the starter figures in this view. Save to publish them. The previous save is kept for up to 24 hours."
-  if (pending?.kind === "company") return `This removes ${pending.name} from YTD results, headcount, and revenue goals.`
+  if (pending?.kind === "reset") {
+    return "Restores the starter figures in this view. Boards you created for these firms stay. Save to publish them. The previous save is kept for up to 24 hours."
+  }
+  if (pending?.kind === "company") {
+    return `This removes ${pending.name} from YTD results, headcount, and revenue goals, and deletes boards created for that firm.`
+  }
   if (pending?.kind === "column") return `This removes ${pending.name} and its cells from this board.`
   return ""
 }

@@ -6,11 +6,11 @@ import { isAdminEmail, isLaunchboxEmail, launchboxEmailFromClaims } from "../src
 import { formatCurrency, parseNumber, parsePercentInput } from "../src/data/format"
 import { isExpired, SNAPSHOT_TTL_MS } from "../src/data/retention"
 import { publishWorkspace, readLiveSnapshot, saveSnapshot } from "../server/snapshots"
-import { aggregateColumn, cellNumber, computeKpis, defaultBarColumnIds, formatColumnValue, profitMarginChart } from "../src/data/metrics"
+import { aggregateColumn, cellNumber, computeKpis, defaultBarColumnIds, formatColumnValue, listCompanies, profitMarginChart } from "../src/data/metrics"
 import { parseWorkspace } from "../src/data/persist"
-import { reducer } from "../src/data/reducer"
+import { keepFirmBoards, reducer } from "../src/data/reducer"
 import { commitHtml, editorHtml, sanitizeRichText } from "../src/data/rich-text"
-import { createSeedWorkspace, IMPROV_OPERATING_RESULTS, seedProblems, varianceStatus, withExpectedColumn, withFirmRatios, withImprovDeck, withoutYtdSubtitle } from "../src/data/seed"
+import { createSeedWorkspace, IMPROV_OPERATING_RESULTS, seedProblems, varianceStatus, withExpectedColumn, withFirmRatios, withImprovDeck, withoutRetiredStatuses, withoutYtdSubtitle } from "../src/data/seed"
 import { EXPECTED_COLUMN_ID, LABEL_COLUMN_ID, type Board, type Workspace } from "../src/data/types"
 
 function must<T>(value: T | undefined | null, message: string): T {
@@ -112,6 +112,90 @@ const firstGroup = must(withColumn.groups[0], "first group")
 workspace = reducer(workspace, { type: "add-row", boardId: "revenue", groupId: firstGroup.id })
 const grown = must(workspace.boards.find((board) => board.id === "revenue")?.groups[0], "grown")
 if (grown.rows.length !== firstGroup.rows.length + 1) throw new Error("row missing")
+
+const firmCount = listCompanies(seed).length
+let custom = reducer(seed, { type: "add-board", boardId: "board-pipeline", firmId: "echelon", title: "Pipeline" })
+const pipeline = must(custom.boards.find((board) => board.id === "board-pipeline"), "pipeline")
+if (pipeline.firmId !== "echelon" || pipeline.title !== "Pipeline") throw new Error("custom board was not created")
+if (pipeline.columns[0]?.id !== LABEL_COLUMN_ID || pipeline.columns[0]?.name !== "Title") throw new Error("custom board title column")
+const notes = must(pipeline.columns[1], "custom column")
+if (notes.name !== "Column" || notes.kind !== "text") throw new Error("custom board column")
+const pipelineGroup = must(pipeline.groups[0], "pipeline group")
+if (pipelineGroup.rows.length !== 3 || pipelineGroup.rows.some((row) => row.cells[LABEL_COLUMN_ID] !== "")) {
+  throw new Error("custom board rows")
+}
+if (listCompanies(custom).length !== firmCount) throw new Error("custom board became a firm")
+if (reducer(seed, { type: "add-board", boardId: "ytd", firmId: "echelon", title: "Nope" }) !== seed) {
+  throw new Error("reserved board id accepted")
+}
+if (reducer(seed, { type: "add-board", boardId: "board-blank", firmId: "echelon", title: "  " }) !== seed) {
+  throw new Error("blank board title accepted")
+}
+if (reducer(seed, { type: "add-board", boardId: "board-missing", firmId: "missing", title: "Nope" }) !== seed) {
+  throw new Error("unknown firm accepted a board")
+}
+const ytdGroups = must(custom.boards.find((board) => board.id === "ytd"), "ytd before firm").groups.length
+custom = reducer(custom, { type: "add-company", name: "Northwind" })
+if (must(custom.boards.find((board) => board.id === "board-pipeline"), "pipeline after firm").groups.length !== 1) {
+  throw new Error("new firm was copied onto a custom board")
+}
+if (must(custom.boards.find((board) => board.id === "ytd"), "ytd after firm").groups.length !== ytdGroups + 1) {
+  throw new Error("new firm missing from ytd")
+}
+if (!reducer(custom, { type: "delete-board", boardId: "ytd" }).boards.some((board) => board.id === "ytd")) {
+  throw new Error("ytd was deleted")
+}
+if (reducer(custom, { type: "rename-board", boardId: "ytd", title: "Nope" }).boards.find((board) => board.id === "ytd")?.title === "Nope") {
+  throw new Error("ytd was renamed")
+}
+const renamed = reducer(custom, { type: "rename-board", boardId: "board-pipeline", title: "Hiring" })
+if (renamed.boards.find((board) => board.id === "board-pipeline")?.title !== "Hiring") throw new Error("custom board was not renamed")
+const pipelineRow = must(pipelineGroup.rows[0], "pipeline row")
+const titled = reducer(custom, {
+  type: "set-cell",
+  boardId: "board-pipeline",
+  groupId: pipelineGroup.id,
+  rowId: pipelineRow.id,
+  columnId: notes.id,
+  value: "Owner",
+})
+const titledCell = titled.boards
+  .find((board) => board.id === "board-pipeline")
+  ?.groups[0]?.rows.find((row) => row.id === pipelineRow.id)?.cells[notes.id]
+if (titledCell !== "Owner") throw new Error("cell title did not save")
+const addedRow = reducer(custom, { type: "add-row", boardId: "board-pipeline", groupId: pipelineGroup.id })
+const newest = addedRow.boards.find((board) => board.id === "board-pipeline")?.groups[0]?.rows.at(-1)
+if (newest?.cells[LABEL_COLUMN_ID] !== "") throw new Error("custom row should start untitled")
+const roundCustom = parseWorkspace(JSON.parse(JSON.stringify(custom)) as unknown)
+if (roundCustom?.boards.find((board) => board.id === "board-pipeline")?.firmId !== "echelon") {
+  throw new Error("custom board did not round trip")
+}
+const expectedCustom = withExpectedColumn(custom)
+if (expectedCustom.boards.find((board) => board.id === "board-pipeline")?.columns.some((column) => column.id === EXPECTED_COLUMN_ID)) {
+  throw new Error("custom board gained expected")
+}
+const droppedFirm = reducer(custom, { type: "delete-company", groupId: "echelon" })
+if (droppedFirm.boards.some((board) => board.id === "board-pipeline")) throw new Error("firm delete left its board")
+if (droppedFirm.boards.find((board) => board.id === "ytd")?.groups.some((group) => group.id === "echelon")) {
+  throw new Error("firm delete left echelon on ytd")
+}
+const keptBoards = keepFirmBoards(seed, custom)
+if (!keptBoards.boards.some((board) => board.id === "board-pipeline")) throw new Error("reset dropped a firm board")
+if (keptBoards.boards.filter((board) => board.id === "ytd").length !== 1) throw new Error("reset duplicated ytd")
+const northwind = must(
+  custom.boards.find((board) => board.id === "ytd")?.groups.find((group) => group.name === "Northwind"),
+  "northwind",
+)
+const northBoard = reducer(custom, { type: "add-board", boardId: "board-north", firmId: northwind.id, title: "North" })
+if (keepFirmBoards(seed, northBoard).boards.some((board) => board.firmId && !listCompanies(seed).some((company) => company.id === board.firmId))) {
+  throw new Error("reset kept a board for a removed firm")
+}
+const numericFirm = JSON.parse(JSON.stringify(seed)) as { boards: { firmId?: unknown }[] }
+const numericBoard = must(numericFirm.boards[0], "numeric firm board")
+numericBoard.firmId = 1
+if (parseWorkspace(numericFirm) !== null) throw new Error("numeric firm id accepted")
+numericBoard.firmId = "  "
+if (parseWorkspace(numericFirm) !== null) throw new Error("blank firm id accepted")
 
 let solo = seed
 for (const company of seed.boards[0]?.groups.slice(1) ?? []) {
@@ -411,9 +495,17 @@ if (varianceStatus(96, 100) !== "On track") throw new Error("4% under is on trac
 if (varianceStatus(108, 100) !== "Watch") throw new Error("8% is still inside the outer band")
 if (varianceStatus(92, 100) !== "Watch") throw new Error("8% under is still inside the outer band")
 if (varianceStatus(109, 100) !== "Ahead") throw new Error("past 8% above is ahead")
-if (varianceStatus(91, 100) !== "Behind") throw new Error("past 8% below is behind")
+if (varianceStatus(91, 100) !== "Watch") throw new Error("past 8% below is watch")
 if (varianceStatus(0, 0) !== "On track") throw new Error("zero expected match")
 if (varianceStatus(1, 0) !== "Ahead") throw new Error("positive against zero expected")
+if (varianceStatus(-1, 0) !== "Watch") throw new Error("negative against zero expected")
+const retired = structuredClone(seed)
+const retiredRow = must(retired.boards[0]?.groups[0]?.rows[0], "retired status row")
+retiredRow.cells.status = "Behind"
+if (withoutRetiredStatuses(retired).boards[0]?.groups[0]?.rows[0]?.cells.status !== "Watch") {
+  throw new Error("behind should become watch")
+}
+if (withoutRetiredStatuses(seed) !== seed) throw new Error("current statuses were rewritten")
 
 const kept = withExpectedColumn(seed)
 const keptExpected = kept.boards

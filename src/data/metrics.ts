@@ -24,6 +24,7 @@ export function isValueColumn(column: Column): boolean {
 export function listCompanies(workspace: Workspace): { id: string; name: string }[] {
   const names = new Map<string, string>()
   for (const board of workspace.boards) {
+    if (board.firmId) continue
     for (const group of board.groups) {
       if (!names.has(group.id)) names.set(group.id, group.name)
     }

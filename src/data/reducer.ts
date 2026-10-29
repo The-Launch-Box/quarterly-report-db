@@ -1,5 +1,7 @@
 import { listCompanies } from "./metrics"
-import { LABEL_COLUMN_ID, type Board, type Column, type ColumnKind, type Workspace } from "./types"
+import { LABEL_COLUMN_ID, type Board, type BoardRow, type Column, type ColumnKind, type Workspace } from "./types"
+
+const RESERVED_BOARD_IDS = new Set(["ytd", "headcount", "revenue"])
 
 export type WorkspaceAction =
   | { type: "set-cell"; boardId: string; groupId: string; rowId: string; columnId: string; value: string }
@@ -13,6 +15,9 @@ export type WorkspaceAction =
   | { type: "delete-company"; groupId: string }
   | { type: "set-operating-results"; groupId: string; value: string }
   | { type: "set-firm-metric"; boardId: string; groupId: string; columnId: string; value: string }
+  | { type: "add-board"; boardId: string; firmId: string; title: string }
+  | { type: "rename-board"; boardId: string; title: string }
+  | { type: "delete-board"; boardId: string }
   | { type: "replace"; workspace: Workspace }
 
 export function reducer(workspace: Workspace, action: WorkspaceAction): Workspace {
@@ -42,7 +47,7 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
           group.id === action.groupId
             ? {
                 ...group,
-                rows: [...group.rows, { id: crypto.randomUUID(), cells: { [LABEL_COLUMN_ID]: "New line" } }],
+                rows: [...group.rows, { id: crypto.randomUUID(), cells: { [LABEL_COLUMN_ID]: board.firmId ? "" : "New line" } }],
               }
             : group,
         ),
@@ -79,13 +84,17 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
       const groupId = crypto.randomUUID()
       return {
         ...workspace,
-        boards: workspace.boards.map((board) => ({
-          ...board,
-          groups: [
-            ...board.groups,
-            { id: groupId, name, rows: [{ id: crypto.randomUUID(), cells: { [LABEL_COLUMN_ID]: "New line" } }] },
-          ],
-        })),
+        boards: workspace.boards.map((board) =>
+          board.firmId
+            ? board
+            : {
+                ...board,
+                groups: [
+                  ...board.groups,
+                  { id: groupId, name, rows: [{ id: crypto.randomUUID(), cells: { [LABEL_COLUMN_ID]: "New line" } }] },
+                ],
+              },
+        ),
       }
     }
     case "rename-company": {
@@ -93,22 +102,45 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
       if (!name) return workspace
       return {
         ...workspace,
-        boards: workspace.boards.map((board) => ({
-          ...board,
-          groups: board.groups.map((group) => (group.id === action.groupId ? { ...group, name } : group)),
-        })),
+        boards: workspace.boards.map((board) =>
+          board.firmId
+            ? board
+            : {
+                ...board,
+                groups: board.groups.map((group) => (group.id === action.groupId ? { ...group, name } : group)),
+              },
+        ),
       }
     }
     case "delete-company": {
       if (listCompanies(workspace).length <= 1) return workspace
       return {
         ...workspace,
-        boards: workspace.boards.map((board) => ({
-          ...board,
-          groups: board.groups.filter((group) => group.id !== action.groupId),
-        })),
+        boards: workspace.boards.flatMap((board) => {
+          if (board.firmId === action.groupId) return []
+          if (board.firmId) return [board]
+          return [{ ...board, groups: board.groups.filter((group) => group.id !== action.groupId) }]
+        }),
       }
     }
+    case "add-board": {
+      const title = action.title.trim()
+      if (!title || title.length > 60) return workspace
+      if (!/^[a-zA-Z0-9-]{1,80}$/.test(action.boardId) || RESERVED_BOARD_IDS.has(action.boardId)) return workspace
+      if (workspace.boards.some((board) => board.id === action.boardId)) return workspace
+      if (!listCompanies(workspace).some((company) => company.id === action.firmId)) return workspace
+      return { ...workspace, boards: [...workspace.boards, firmBoard(action.boardId, action.firmId, title)] }
+    }
+    case "rename-board": {
+      const title = action.title.trim()
+      if (!title || title.length > 60) return workspace
+      return mapBoard(workspace, action.boardId, (board) => (board.firmId ? { ...board, title } : board))
+    }
+    case "delete-board":
+      return {
+        ...workspace,
+        boards: workspace.boards.filter((board) => !(board.firmId && board.id === action.boardId)),
+      }
     case "set-operating-results":
       return mapBoard(workspace, "ytd", (board) => ({
         ...board,
@@ -138,6 +170,40 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
       return workspace
     }
   }
+}
+
+/** Keeps firm boards whose firm is still in the restored workspace. */
+export function keepFirmBoards(next: Workspace, current: Workspace): Workspace {
+  const firms = new Set(listCompanies(next).map((company) => company.id))
+  const kept = current.boards.filter((board) => board.firmId && firms.has(board.firmId))
+  if (kept.length === 0) return next
+  return { ...next, boards: [...next.boards.filter((board) => !board.firmId), ...kept] }
+}
+
+function firmBoard(boardId: string, firmId: string, title: string): Board {
+  return {
+    id: boardId,
+    title,
+    subtitle: "",
+    aggregateRows: false,
+    firmId,
+    columns: [
+      { id: LABEL_COLUMN_ID, name: "Title", kind: "text" },
+      { id: crypto.randomUUID(), name: "Column", kind: "text" },
+    ],
+    groups: [
+      {
+        id: `group-${boardId}`,
+        name: "Items",
+        rows: [blankItem(), blankItem(), blankItem()],
+      },
+    ],
+    kpis: [],
+  }
+}
+
+function blankItem(): BoardRow {
+  return { id: crypto.randomUUID(), cells: { [LABEL_COLUMN_ID]: "" } }
 }
 
 function mapBoard(workspace: Workspace, boardId: string, mapper: (board: Board) => Board): Workspace {

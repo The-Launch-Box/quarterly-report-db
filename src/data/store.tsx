@@ -3,8 +3,8 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useReducer,
 import { useSession } from "@/auth/gate"
 import { listCompanies } from "./metrics"
 import { fetchBoard, fetchSeed, putBoard, type BoardPayload } from "./remote"
-import { reducer, type WorkspaceAction } from "./reducer"
-import { withFirmRatios, withImprovDeck, withoutYtdSubtitle } from "./seed"
+import { keepFirmBoards, reducer, type WorkspaceAction } from "./reducer"
+import { withFirmRatios, withImprovDeck, withoutRetiredStatuses, withoutYtdSubtitle } from "./seed"
 import type { Workspace } from "./types"
 
 const COMPANY_KEY = "karla-q3-company"
@@ -62,7 +62,10 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     void fetchBoard()
       .then((payload) => {
         if (cancelled) return
-        applyPayload({ ...payload, workspace: withoutYtdSubtitle(withFirmRatios(withImprovDeck(payload.workspace))) })
+        applyPayload({
+          ...payload,
+          workspace: withoutRetiredStatuses(withoutYtdSubtitle(withFirmRatios(withImprovDeck(payload.workspace)))),
+        })
         setReady(true)
       })
       .catch((reason: unknown) => {
@@ -117,7 +120,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
     setSaveError("")
     try {
       const next = await fetchSeed()
-      rawDispatch({ type: "replace", workspace: next })
+      rawDispatch({ type: "replace", workspace: keepFirmBoards(next, workspaceRef.current) })
     } catch (reason) {
       setSaveError(reason instanceof Error ? reason.message : "Could not restore the starter figures.")
     }

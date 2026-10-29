@@ -213,15 +213,15 @@ function GroupRows({
           return (
             <td key={column.id} className="border-b border-border-soft bg-bg-raised px-1 py-1">
               {column.scope === "firm" ? (
-                <CellControl
-                  column={column}
-                  columns={board.columns}
-                  row={{ id: group.id, cells: {} }}
-                  raw={raw}
-                  editable={canEdit}
-                  ariaLabel={`${column.name} for ${groupName}`}
-                  onCommit={(value) => onCommitMetric(groupId, column.id, value)}
-                />
+                        <EditableCell
+                          column={column}
+                          columns={board.columns}
+                          row={{ id: group.id, cells: {} }}
+                          raw={raw}
+                          editable={canEdit}
+                          ariaLabel={`${column.name} for ${groupName}`}
+                          onCommit={(value) => onCommitMetric(groupId, column.id, value)}
+                        />
               ) : null}
             </td>
           )
@@ -250,7 +250,7 @@ function GroupRows({
                       {column.scope === "firm" ? (
                         <span className="block h-8" />
                       ) : (
-                        <CellControl
+                        <EditableCell
                           column={column}
                           columns={board.columns}
                           row={row}
@@ -413,7 +413,7 @@ function CompanyName({ name, brandId, onCommit }: { name: string; brandId: strin
   )
 }
 
-function CellControl({
+export function EditableCell({
   column,
   columns,
   row,
@@ -421,6 +421,7 @@ function CellControl({
   editable,
   ariaLabel,
   onCommit,
+  placeholder,
 }: {
   column: Column
   columns: Column[]
@@ -429,12 +430,13 @@ function CellControl({
   editable: boolean
   ariaLabel: string
   onCommit: (value: string) => void
+  placeholder?: string
 }) {
   if (column.formula || !editable) {
     return <ReadOnlyValue column={column} columns={columns} row={row} raw={raw} calculated={Boolean(column.formula)} />
   }
   if (column.kind === "status") return <StatusCell raw={raw} ariaLabel={ariaLabel} onCommit={onCommit} />
-  if (column.kind === "text") return <TextCell raw={raw} ariaLabel={ariaLabel} onCommit={onCommit} />
+  if (column.kind === "text") return <TextCell raw={raw} ariaLabel={ariaLabel} onCommit={onCommit} placeholder={placeholder} />
   return <NumericCell kind={column.kind} decimals={column.decimals} raw={raw} ariaLabel={ariaLabel} onCommit={onCommit} />
 }
 
@@ -471,11 +473,20 @@ function statusClass(raw: string): string {
   if (raw === "Ahead") return "text-info"
   if (raw === "On track") return "text-positive"
   if (raw === "Watch") return "text-warning"
-  if (raw === "Behind") return "text-negative"
   return "text-fg-faint"
 }
 
-function TextCell({ raw, ariaLabel, onCommit }: { raw: string; ariaLabel: string; onCommit: (value: string) => void }) {
+function TextCell({
+  raw,
+  ariaLabel,
+  onCommit,
+  placeholder,
+}: {
+  raw: string
+  ariaLabel: string
+  onCommit: (value: string) => void
+  placeholder?: string
+}) {
   const [focused, setFocused] = useState(false)
   const [draft, setDraft] = useState(raw)
   const cancel = useRef(false)
@@ -486,6 +497,7 @@ function TextCell({ raw, ariaLabel, onCommit }: { raw: string; ariaLabel: string
   return (
     <Input
       aria-label={ariaLabel}
+      placeholder={placeholder}
       value={focused ? draft : raw}
       onFocus={(event) => {
         setDraft(raw)
@@ -582,11 +594,10 @@ function StatusCell({ raw, ariaLabel, onCommit }: { raw: string; ariaLabel: stri
         raw === "Ahead" && "bg-info-dim text-info",
         raw === "On track" && "bg-positive-dim text-positive",
         raw === "Watch" && "bg-warning-dim text-warning",
-        raw === "Behind" && "bg-negative-dim text-negative",
         !raw && "text-fg-faint",
       )}
     >
-      <option value="">Unset</option>
+      {!raw ? <option value="" hidden /> : null}
       {known || !raw ? null : <option value={raw}>{raw}</option>}
       {STATUS_VALUES.map((status) => (
         <option key={status} value={status}>

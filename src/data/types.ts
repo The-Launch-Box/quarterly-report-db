@@ -3,7 +3,7 @@ export const LABEL_COLUMN_ID = "label"
 /** Plan column. On the YTD board it sits directly beside Q1. */
 export const EXPECTED_COLUMN_ID = "expected"
 
-export const STATUS_VALUES = ["Ahead", "On track", "Watch", "Behind"] as const
+export const STATUS_VALUES = ["Ahead", "On track", "Watch"] as const
 
 export type StatusValue = (typeof STATUS_VALUES)[number]
 
@@ -83,6 +83,8 @@ export interface Board {
   kpis: KpiDef[]
   /** YTD firm-ratio columns were added. A later delete of one of those columns stays deleted. */
   firmRatios?: boolean
+  /** Set on a board created for one firm. Portfolio boards leave this unset. */
+  firmId?: string
 }
 
 export interface Workspace {

@@ -3,7 +3,14 @@ import path from "node:path"
 
 import { expiresAt, isExpired } from "../src/data/retention"
 import { parseWorkspace } from "../src/data/persist"
-import { createSeedWorkspace, withExpectedColumn, withFirmRatios, withImprovDeck, withoutYtdSubtitle } from "../src/data/seed"
+import {
+  createSeedWorkspace,
+  withExpectedColumn,
+  withFirmRatios,
+  withImprovDeck,
+  withoutRetiredStatuses,
+  withoutYtdSubtitle,
+} from "../src/data/seed"
 import type { Workspace } from "../src/data/types"
 
 export interface StoredSnapshot {
@@ -32,7 +39,7 @@ export function currentBoard(dir: string, now = Date.now()): BoardPayload {
     savedAt: live.savedAt,
     savedBy: live.savedBy,
     expiresAt: expiresAt(live.savedAt),
-    workspace: withoutYtdSubtitle(withFirmRatios(withImprovDeck(live.workspace))),
+    workspace: withoutRetiredStatuses(withoutYtdSubtitle(withFirmRatios(withImprovDeck(live.workspace)))),
   }
 }
 
@@ -49,7 +56,11 @@ export function publishWorkspace(
   if (!viewer.admin) return { ok: false, status: 403, message: "Only admins can save." }
   const workspace = parseWorkspace(body)
   if (!workspace) return { ok: false, status: 400, message: "The boards could not be saved." }
-  const snapshot = saveSnapshot(dir, { savedBy: viewer.email, workspace: withExpectedColumn(workspace) }, now)
+  const snapshot = saveSnapshot(
+    dir,
+    { savedBy: viewer.email, workspace: withoutRetiredStatuses(withExpectedColumn(workspace)) },
+    now,
+  )
   return { ok: true, snapshot }
 }
 
@@ -111,7 +122,11 @@ function readSnapshotFile(file: string): StoredSnapshot | null {
     if (!isRecord(value) || typeof value.savedAt !== "string" || typeof value.savedBy !== "string") return null
     const workspace = parseWorkspace(value.workspace)
     if (!workspace) return null
-    return { savedAt: value.savedAt, savedBy: value.savedBy, workspace: withoutYtdSubtitle(withFirmRatios(withExpectedColumn(workspace))) }
+    return {
+      savedAt: value.savedAt,
+      savedBy: value.savedBy,
+      workspace: withoutRetiredStatuses(withoutYtdSubtitle(withFirmRatios(withExpectedColumn(workspace)))),
+    }
   } catch {
     return null
   }

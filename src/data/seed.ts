@@ -269,6 +269,38 @@ export function withImprovDeck(workspace: Workspace): Workspace {
   return changed ? { ...workspace, boards } : workspace
 }
 
+/** A saved board may still say Behind. That status is Watch now. */
+export function withoutRetiredStatuses(workspace: Workspace): Workspace {
+  let changed = false
+  const boards = workspace.boards.map((board) => {
+    const statusIds = board.columns.filter((column) => column.kind === "status").map((column) => column.id)
+    if (statusIds.length === 0) return board
+    let boardChanged = false
+    const groups = board.groups.map((group) => {
+      let groupChanged = false
+      const rows = group.rows.map((row) => {
+        const cells = { ...row.cells }
+        let rowChanged = false
+        for (const id of statusIds) {
+          if (cells[id] !== "Behind") continue
+          cells[id] = "Watch"
+          rowChanged = true
+        }
+        if (!rowChanged) return row
+        groupChanged = true
+        return { ...row, cells }
+      })
+      if (!groupChanged) return group
+      boardChanged = true
+      return { ...group, rows }
+    })
+    if (!boardChanged) return board
+    changed = true
+    return { ...board, groups }
+  })
+  return changed ? { ...workspace, boards } : workspace
+}
+
 /** Drops the note under YTD financial results, including on a saved board. */
 export function withoutYtdSubtitle(workspace: Workspace): Workspace {
   let changed = false
@@ -737,6 +769,7 @@ export function withExpectedColumn(workspace: Workspace): Workspace {
 }
 
 function placeExpected(board: Board): Board {
+  if (board.firmId) return board
   const existing = board.columns.find((column) => column.id === EXPECTED_COLUMN_ID)
   const rest = board.columns.filter((column) => column.id !== EXPECTED_COLUMN_ID)
   const column = existing ?? { id: EXPECTED_COLUMN_ID, name: "Expected", kind: expectedKind(board) }
@@ -791,18 +824,16 @@ function allocate(total: number, weights: readonly number[]): number[] {
 
 /**
  * Status from (actual − expected) / expected.
- * Within 4% is On track. More than 8% below is Behind. More than 8% above is Ahead.
- * The open band between those cuts is Watch.
+ * Within 4% is On track. More than 8% above is Ahead. Anything else is Watch.
  */
 export function varianceStatus(actual: number, expected: number): StatusValue {
   if (expected === 0) {
     if (actual > 0) return "Ahead"
-    if (actual < 0) return "Behind"
+    if (actual < 0) return "Watch"
     return "On track"
   }
   const variance = (actual - expected) / expected
   if (Math.abs(variance) <= 0.04 + 1e-9) return "On track"
-  if (variance < -0.08 - 1e-9) return "Behind"
   if (variance > 0.08 + 1e-9) return "Ahead"
   return "Watch"
 }

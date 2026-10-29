@@ -51,6 +51,7 @@ function readBoard(value: unknown): Board | null {
       kpis.push(kpi)
     }
   }
+  if (value.firmId !== undefined && (typeof value.firmId !== "string" || value.firmId.trim() === "")) return null
   return {
     id: value.id,
     title: value.title,
@@ -60,6 +61,7 @@ function readBoard(value: unknown): Board | null {
     groups,
     kpis,
     ...(value.firmRatios === true ? { firmRatios: true as const } : {}),
+    ...(typeof value.firmId === "string" ? { firmId: value.firmId.trim() } : {}),
   }
 }
 

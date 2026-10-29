@@ -1,7 +1,9 @@
-import { NavLink, Outlet } from "react-router"
-import { Save, Target, Users, Wallet, type LucideIcon } from "lucide-react"
+import { useEffect } from "react"
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router"
+import { Circle, Save, Target, Users, Wallet, type LucideIcon } from "lucide-react"
 
 import { useSession } from "@/auth/gate"
+import { CreateBoardButton } from "@/components/create-board"
 import { portcoId } from "@/data/brands"
 import { listCompanies } from "@/data/metrics"
 import { useWorkspace } from "@/data/store"
@@ -16,10 +18,21 @@ const NAV: { to: string; label: string; icon: LucideIcon }[] = [
 
 export function Shell() {
   const session = useSession()
+  const navigate = useNavigate()
+  const { pathname } = useLocation()
   const { workspace, companyId, setCompanyId, canEdit, statusLabel, statusTone, saving, save } = useWorkspace()
   const companies = listCompanies(workspace)
   const portco = companyId === "all" ? null : portcoId(companyId)
   const options = [{ value: "all", label: "All firms" }, ...companies.map((company) => ({ value: company.id, label: company.name }))]
+
+  useEffect(() => {
+    if (workspace.boards.length === 0) return
+    const boardId = pathname.split("/").filter(Boolean)[0]
+    if (!boardId) return
+    const board = workspace.boards.find((item) => item.id === boardId)
+    if (!board?.firmId || companyId === "all" || board.firmId === companyId) return
+    navigate("/ytd")
+  }, [pathname, workspace, companyId, navigate])
 
   return (
     <div className="flex h-full overflow-hidden bg-background text-foreground">
@@ -37,12 +50,11 @@ export function Shell() {
             <p className="font-display text-[1.65rem] leading-none">Quarterly report</p>
           </div>
         </div>
-        <p className="mt-2 px-4 text-[11px] uppercase tracking-widest text-muted-foreground">Boards</p>
-        <nav className="mt-2 flex flex-col gap-1 px-2" aria-label="Boards">
-          {NAV.map((item) => (
-            <BoardLink key={item.to} {...item} />
-          ))}
-        </nav>
+        <div className="mt-2 flex items-center gap-1 px-4">
+          <p className="text-[11px] uppercase tracking-widest text-muted-foreground">Boards</p>
+          <CreateBoardButton />
+        </div>
+        <BoardNav layout="stack" />
         <p className="mt-6 px-4 text-[11px] uppercase tracking-widest text-muted-foreground">Firms</p>
         <div className="mt-2 flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-2 pb-4">
           <CompanyButton active={companyId === "all"} onClick={() => setCompanyId("all")}>
@@ -85,11 +97,11 @@ export function Shell() {
           </div>
         </header>
         <main id="board-main" className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
-          <nav className="mb-4 flex flex-wrap gap-2 md:hidden" aria-label="Boards">
-            {NAV.map((item) => (
-              <BoardLink key={item.to} {...item} />
-            ))}
-          </nav>
+          <div className="mb-2 flex items-center gap-1 md:hidden">
+            <p className="text-[11px] uppercase tracking-widest text-muted-foreground">Boards</p>
+            <CreateBoardButton />
+          </div>
+          <BoardNav layout="wrap" />
           <div
             data-portco={portco ?? undefined}
             className={cn(portco && "rounded-lg border border-border bg-background p-4 font-sans text-foreground shadow-[inset_0_3px_0_var(--color-primary)] md:p-5")}
@@ -102,10 +114,51 @@ export function Shell() {
   )
 }
 
-function BoardLink({ to, label, icon: Icon }: { to: string; label: string; icon: LucideIcon }) {
+function BoardNav({ layout }: { layout: "stack" | "wrap" }) {
+  const { workspace, companyId } = useWorkspace()
+  const companies = listCompanies(workspace)
+  const custom = workspace.boards.filter((board) => board.firmId && (companyId === "all" || board.firmId === companyId))
+
+  return (
+    <nav
+      className={layout === "stack" ? "mt-2 flex min-h-0 flex-col px-2" : "mb-4 flex flex-wrap gap-2 md:hidden"}
+      aria-label="Boards"
+    >
+      <div className={layout === "stack" ? "flex max-h-[40vh] flex-col gap-1 overflow-y-auto" : "contents"}>
+        {NAV.map((item) => (
+          <BoardLink key={item.to} {...item} />
+        ))}
+        {custom.map((board) => (
+          <BoardLink
+            key={board.id}
+            to={`/${board.id}`}
+            label={board.title}
+            circle
+            hint={companyId === "all" ? companies.find((company) => company.id === board.firmId)?.name : undefined}
+          />
+        ))}
+      </div>
+    </nav>
+  )
+}
+
+function BoardLink({
+  to,
+  label,
+  icon: Icon,
+  circle,
+  hint,
+}: {
+  to: string
+  label: string
+  icon?: LucideIcon
+  circle?: boolean
+  hint?: string
+}) {
   return (
     <NavLink
       to={to}
+      title={circle ? label : undefined}
       className={({ isActive }) =>
         cn(
           "flex shrink-0 items-center gap-2 rounded-md px-3 py-2 text-sm text-muted-foreground outline-none hover:bg-bg-raised hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring",
@@ -113,8 +166,15 @@ function BoardLink({ to, label, icon: Icon }: { to: string; label: string; icon:
         )
       }
     >
-      <Icon className="size-4 shrink-0" aria-hidden="true" />
-      <span className="whitespace-nowrap md:whitespace-normal">{label}</span>
+      {circle ? (
+        <Circle className="size-3 shrink-0" aria-hidden="true" />
+      ) : Icon ? (
+        <Icon className="size-4 shrink-0" aria-hidden="true" />
+      ) : null}
+      <span className="min-w-0">
+        <span className={cn("block", circle ? "max-w-44 truncate" : "whitespace-nowrap md:whitespace-normal")}>{label}</span>
+        {hint ? <span className="block truncate text-[10px] uppercase tracking-widest text-fg-faint">{hint}</span> : null}
+      </span>
     </NavLink>
   )
 }
