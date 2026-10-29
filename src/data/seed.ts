@@ -56,6 +56,7 @@ const PORTCOS: readonly PortcoSeed[] = [
   {
     id: "improv",
     name: "Improv",
+    // Not used. Improv tables come from the deck groups in this file.
     revenue: [2_200_000, 2_350_000, 2_500_000, 2_620_000],
     gp: 0.46,
     ebitda: 0.12,
@@ -177,6 +178,27 @@ const REVENUE_COLUMNS: Column[] = [
   { id: "status", name: "Status", kind: "status" },
 ]
 
+/** Replaces a saved Improv group that still has the old placeholder lines. */
+export function withImprovDeck(workspace: Workspace): Workspace {
+  const current = workspace.boards.find((board) => board.id === "ytd")?.groups.find((group) => group.id === "improv")
+  if (!current) return workspace
+  if (current.operatingResults !== undefined && current.rows.some((row) => row.cells[LABEL_COLUMN_ID] === "Net income")) {
+    return workspace
+  }
+  let changed = false
+  const boards = workspace.boards.map((board) => {
+    const next = improvDeckGroup(board.id)
+    if (!next) return board
+    const index = board.groups.findIndex((group) => group.id === "improv")
+    if (index === -1) return board
+    changed = true
+    const groups = board.groups.slice()
+    groups[index] = next
+    return { ...board, groups }
+  })
+  return changed ? { ...workspace, boards } : workspace
+}
+
 export function createSeedWorkspace(): Workspace {
   return {
     version: 1,
@@ -187,7 +209,7 @@ export function createSeedWorkspace(): Workspace {
         subtitle: "Expected sits beside Q1. Closed actuals run Q1 to Q3. Q4 forecast is the working column. YTD is calculated.",
         aggregateRows: false,
         columns: YTD_COLUMNS,
-        groups: PORTCOS.map(ytdGroup),
+        groups: PORTCOS.map((portco) => (portco.id === "improv" ? improvYtdGroup() : ytdGroup(portco))),
         kpis: [
           { id: "q3-revenue", label: "Q3 revenue", columnId: "q3", labelEquals: "Revenue" },
           { id: "q4-revenue", label: "Q4 revenue", columnId: "q4", labelEquals: "Revenue", compareColumnId: "q3" },
@@ -201,7 +223,7 @@ export function createSeedWorkspace(): Workspace {
         subtitle: "Expected is the Q4 hiring plan, beside Q3 close. Fully loaded is forecast times annual rate.",
         aggregateRows: true,
         columns: HEADCOUNT_COLUMNS,
-        groups: PORTCOS.map(headcountGroup),
+        groups: PORTCOS.map((portco) => (portco.id === "improv" ? improvHeadcountGroup() : headcountGroup(portco))),
         kpis: [
           { id: "q3-heads", label: "Q3 close", columnId: "q3" },
           { id: "q4-heads", label: "Q4 forecast", columnId: "q4", compareColumnId: "q3" },
@@ -214,7 +236,7 @@ export function createSeedWorkspace(): Workspace {
         subtitle: "Expected is the Q4 goal, beside Q3 actual. Attainment compares the live forecast with that goal.",
         aggregateRows: true,
         columns: REVENUE_COLUMNS,
-        groups: PORTCOS.map(revenueGroup),
+        groups: PORTCOS.map((portco) => (portco.id === "improv" ? improvRevenueGroup() : revenueGroup(portco))),
         kpis: [
           { id: "q3-actual", label: "Q3 revenue", columnId: "q3" },
           { id: "q4-goal", label: "Q4 goal", columnId: "goal" },
@@ -238,6 +260,10 @@ export function seedProblems(): string[] {
       problems.push(`Missing revenue for ${group.id}.`)
       continue
     }
+    if (group.id === "improv") {
+      problems.push(...improvSeedProblems(group, motions))
+      continue
+    }
     for (const quarter of ["q3", "q4"] as const) {
       const total = Number(rev.cells[quarter])
       const sum = motions.rows.reduce((acc, row) => acc + Number(row.cells[quarter] ?? 0), 0)
@@ -245,6 +271,212 @@ export function seedProblems(): string[] {
     }
   }
   return problems
+}
+
+/** YTD operating results copied from the Improv deck. */
+export const IMPROV_OPERATING_RESULTS = [
+  "• $3.4M YTD Revenue vs $3.6M (-5%)",
+  "• $1.3M Gross Margin, 38% YTD",
+  "• P7 operational burn-rate of ~$460k",
+  "• $198k Net Income, 6% YTD",
+  "• $4.2M backlog as of 8/01",
+  "",
+  "Gross profit margin: P7 41%, Q3 41%, YTD 38%, target 50%",
+  "Non-billable travel expense margin: P7 1%, Q3 1%, YTD 1%, target 5%",
+  "SG&A expense ratio: P7 25%, Q3 25%, YTD 31%, target 20%",
+  "Net profit margin: P7 16%, Q3 16%, YTD 6%, target 25%",
+  "Revenue growth rate: P7 32%, Q3 32%, YTD 61%, target 95%",
+  "Working capital ratio: P7 1.38, Q3 1.38, YTD 0.75, target 1.50",
+].join("\n")
+
+const IMPROV_REVENUE_YTD = 3_400_000
+const IMPROV_REVENUE_EXPECTED = 3_600_000
+const IMPROV_GROSS_YTD = 1_300_000
+const IMPROV_GROSS_EXPECTED = 1_800_000
+const IMPROV_NET_YTD = 198_000
+const IMPROV_NET_EXPECTED = 900_000
+
+const IMPROV_HEADCOUNT: readonly (readonly [string, number])[] = [
+  ["Aug 2025", 30],
+  ["Sep 2025", 36],
+  ["Oct 2025", 34],
+  ["Nov 2025", 31],
+  ["Dec 2025", 33],
+  ["Jan 2026", 33],
+  ["Feb 2026", 34],
+  ["Mar 2026", 35],
+  ["Apr 2026", 33],
+  ["May 2026", 32],
+  ["Jun 2026", 32],
+  ["Jul 2026", 31],
+  ["Aug 2026", 32],
+]
+
+const IMPROV_CENSUS: readonly (readonly [string, number])[] = [
+  ["2025 headcount", 33],
+  ["2024 headcount", 21],
+  ["2023 headcount", 5],
+]
+
+const IMPROV_TERMINATIONS: readonly (readonly [string, number])[] = [
+  ["Involuntary termination %", 70],
+  ["Voluntary unspecified %", 15],
+  ["Non-regrettable %", 10],
+  ["Regrettable %", 5],
+]
+
+const IMPROV_TENURE: readonly (readonly [string, number])[] = [
+  ["Tenure 1-3 years %", 40],
+  ["Tenure 6 months-1 year %", 30],
+  ["Tenure under 6 months %", 20],
+]
+
+const IMPROV_PLAN: readonly (readonly [string, number])[] = [
+  ["2026 revenue", 8_100_000],
+  ["2026 gross margin (43%)", 3_500_000],
+  ["2027 revenue", 13_500_000],
+  ["2027 gross margin (45%)", 6_000_000],
+  ["2028 revenue", 18_000_000],
+  ["2028 gross margin (50%)", 9_000_000],
+]
+
+function improvDeckGroup(boardId: string): BoardGroup | null {
+  if (boardId === "ytd") return improvYtdGroup()
+  if (boardId === "headcount") return improvHeadcountGroup()
+  if (boardId === "revenue") return improvRevenueGroup()
+  return null
+}
+
+function improvYtdGroup(): BoardGroup {
+  const revenue = thirds(IMPROV_REVENUE_YTD)
+  const gross = thirds(IMPROV_GROSS_YTD)
+  const net = thirds(IMPROV_NET_YTD)
+  const opex: [number, number, number] = [
+    gross[0] - net[0],
+    gross[1] - net[1],
+    gross[2] - net[2],
+  ]
+  return {
+    id: "improv",
+    name: "Improv",
+    operatingResults: IMPROV_OPERATING_RESULTS,
+    rows: [
+      closedMoneyRow("improv-revenue", "Revenue", revenue, IMPROV_REVENUE_EXPECTED),
+      closedMoneyRow("improv-gp", "Gross profit", gross, IMPROV_GROSS_EXPECTED),
+      closedMoneyRow("improv-opex", "Operating expenses", opex, IMPROV_GROSS_EXPECTED - IMPROV_NET_EXPECTED),
+      closedMoneyRow("improv-net-income", "Net income", net, IMPROV_NET_EXPECTED),
+    ],
+  }
+}
+
+function improvHeadcountGroup(): BoardGroup {
+  return {
+    id: "improv",
+    name: "Improv",
+    rows: [
+      headcountFact("improv-total-employees", "Total employees", 32, true),
+      ...IMPROV_HEADCOUNT.map(([label, count]) => headcountFact(`improv-${slug(label)}`, label, count, false)),
+      ...IMPROV_CENSUS.map(([label, count]) => headcountFact(`improv-census-${slug(label)}`, label, count, false)),
+      headcountFact("improv-turnover", "Total turnover (61%)", 20, false),
+      ...IMPROV_TERMINATIONS.map(([label, count]) => headcountFact(`improv-${slug(label)}`, label, count, false)),
+      ...IMPROV_TENURE.map(([label, count]) => headcountFact(`improv-${slug(label)}`, label, count, false)),
+    ],
+  }
+}
+
+function improvRevenueGroup(): BoardGroup {
+  return {
+    id: "improv",
+    name: "Improv",
+    rows: IMPROV_PLAN.map(([label, amount]) => ({
+      id: `improv-${slug(label)}`,
+      omitFromRollup: true,
+      cells: {
+        [LABEL_COLUMN_ID]: label,
+        [EXPECTED_COLUMN_ID]: String(amount),
+        status: "",
+      },
+    })),
+  }
+}
+
+function improvSeedProblems(ytd: BoardGroup, revenue: BoardGroup): string[] {
+  const problems: string[] = []
+  const revenueRow = ytd.rows.find((row) => row.cells[LABEL_COLUMN_ID] === "Revenue")
+  const gross = ytd.rows.find((row) => row.cells[LABEL_COLUMN_ID] === "Gross profit")
+  const net = ytd.rows.find((row) => row.cells[LABEL_COLUMN_ID] === "Net income")
+  const opex = ytd.rows.find((row) => row.cells[LABEL_COLUMN_ID] === "Operating expenses")
+  if (!revenueRow || !gross || !net || !opex) {
+    problems.push("Improv P&L is missing a line.")
+    return problems
+  }
+  const quarters = ["q1", "q2", "q3"] as const
+  if (quarterSum(revenueRow, quarters) !== IMPROV_REVENUE_YTD) problems.push("Improv revenue YTD is not $3.4M.")
+  if (revenueRow.cells[EXPECTED_COLUMN_ID] !== String(IMPROV_REVENUE_EXPECTED)) problems.push("Improv revenue expected is not $3.6M.")
+  if (quarterSum(gross, quarters) !== IMPROV_GROSS_YTD) problems.push("Improv gross profit YTD is not $1.3M.")
+  if (quarterSum(net, quarters) !== IMPROV_NET_YTD) problems.push("Improv net income YTD is not $198k.")
+  for (const quarter of quarters) {
+    const gap = Number(gross.cells[quarter]) - Number(net.cells[quarter])
+    if (gap !== Number(opex.cells[quarter])) problems.push(`Improv ${quarter} does not foot.`)
+  }
+  if (ytd.operatingResults !== IMPROV_OPERATING_RESULTS) problems.push("Improv operating results are missing.")
+  const plan = new Map(IMPROV_PLAN)
+  for (const [label, amount] of plan) {
+    const row = revenue.rows.find((item) => item.cells[LABEL_COLUMN_ID] === label)
+    if (!row || row.cells[EXPECTED_COLUMN_ID] !== String(amount)) problems.push(`Improv plan is missing ${label}.`)
+  }
+  return problems
+}
+
+function quarterSum(row: BoardRow, quarters: readonly string[]): number {
+  return quarters.reduce((sum, id) => sum + Number(row.cells[id] ?? 0), 0)
+}
+
+/** The deck states a YTD total. Closed quarters share it so the calculated YTD matches. */
+function thirds(total: number): [number, number, number] {
+  const base = Math.floor(total / 3)
+  return [base, base, total - base * 2]
+}
+
+function closedMoneyRow(id: string, label: string, quarters: readonly [number, number, number], expected: number): BoardRow {
+  const actual = quarters[0] + quarters[1] + quarters[2]
+  return {
+    id,
+    cells: {
+      [LABEL_COLUMN_ID]: label,
+      [EXPECTED_COLUMN_ID]: String(expected),
+      q1: String(quarters[0]),
+      q2: String(quarters[1]),
+      q3: String(quarters[2]),
+      status: varianceStatus(actual, expected),
+    },
+  }
+}
+
+function headcountFact(id: string, label: string, count: number, rollup: boolean): BoardRow {
+  const row: BoardRow = {
+    id,
+    cells: {
+      [LABEL_COLUMN_ID]: label,
+      [EXPECTED_COLUMN_ID]: String(count),
+      q3: String(count),
+      status: rollup ? varianceStatus(count, count) : "",
+    },
+  }
+  if (rollup) {
+    row.cells.q4plan = String(count)
+    row.cells.q4 = String(count)
+  } else {
+    row.omitFromRollup = true
+  }
+  return row
+}
+
+function slug(label: string): string {
+  return label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-|-$/g, "")
 }
 
 function ytdGroup(portco: PortcoSeed): BoardGroup {

@@ -3,7 +3,7 @@ import path from "node:path"
 
 import { expiresAt, isExpired } from "../src/data/retention"
 import { parseWorkspace } from "../src/data/persist"
-import { createSeedWorkspace, withExpectedColumn } from "../src/data/seed"
+import { createSeedWorkspace, withExpectedColumn, withImprovDeck } from "../src/data/seed"
 import type { Workspace } from "../src/data/types"
 
 export interface StoredSnapshot {
@@ -32,7 +32,7 @@ export function currentBoard(dir: string, now = Date.now()): BoardPayload {
     savedAt: live.savedAt,
     savedBy: live.savedBy,
     expiresAt: expiresAt(live.savedAt),
-    workspace: live.workspace,
+    workspace: withImprovDeck(live.workspace),
   }
 }
 

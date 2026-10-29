@@ -86,7 +86,8 @@ export function cellNumber(column: Column, row: BoardRow, columns: Column[], dep
 
 export function aggregateColumn(column: Column, rows: BoardRow[], columns: Column[], depth = 0): number | null {
   if (depth > 4) return null
-  if (column.rollup === "skip" && rows.length > 1) return null
+  const counted = rows.filter((row) => !row.omitFromRollup)
+  if (column.rollup === "skip" && counted.length > 1) return null
   const formula = column.formula
   if (formula?.op === "ratio") {
     const numerator = columns.find((item) => item.id === formula.numeratorId)
@@ -100,7 +101,7 @@ export function aggregateColumn(column: Column, rows: BoardRow[], columns: Colum
 
   let total = 0
   let count = 0
-  for (const row of rows) {
+  for (const row of counted) {
     const value = cellNumber(column, row, columns)
     if (value === null) continue
     total += value

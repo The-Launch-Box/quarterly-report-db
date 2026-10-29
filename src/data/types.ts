@@ -41,12 +41,16 @@ export interface Column {
 export interface BoardRow {
   id: string
   cells: Record<string, string>
+  /** Leave this row out of company sums, portfolio totals, and KPI rollups. */
+  omitFromRollup?: boolean
 }
 
 export interface BoardGroup {
   id: string
   name: string
   rows: BoardRow[]
+  /** Improv commentary on the YTD board. Editable plaintext. */
+  operatingResults?: string
 }
 
 export interface KpiDef {

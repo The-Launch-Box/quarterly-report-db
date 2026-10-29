@@ -100,14 +100,22 @@ function readGroup(value: unknown): BoardGroup | null {
     if (!row) return null
     rows.push(row)
   }
-  return { id: value.id, name: value.name, rows }
+  const group: BoardGroup = { id: value.id, name: value.name, rows }
+  if (value.operatingResults !== undefined) {
+    if (typeof value.operatingResults !== "string") return null
+    group.operatingResults = value.operatingResults
+  }
+  return group
 }
 
 function readRow(value: unknown): BoardRow | null {
   if (!isRecord(value) || typeof value.id !== "string") return null
   const cells = readCells(value.cells)
   if (!cells) return null
-  return { id: value.id, cells }
+  if (value.omitFromRollup !== undefined && value.omitFromRollup !== true) return null
+  const row: BoardRow = { id: value.id, cells }
+  if (value.omitFromRollup === true) row.omitFromRollup = true
+  return row
 }
 
 function readCells(value: unknown): Record<string, string> | null {

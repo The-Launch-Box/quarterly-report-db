@@ -124,7 +124,12 @@ export function BoardTable({
             />
           ))}
           {board.aggregateRows && groups.length > 1 ? (
-            <SummaryRow label="Total" board={board} rows={groups.flatMap((group) => group.rows)} trailing={canEdit} />
+            <SummaryRow
+              label="Total"
+              board={board}
+              rows={groups.flatMap((group) => group.rows).filter((row) => !row.omitFromRollup)}
+              trailing={canEdit}
+            />
           ) : null}
         </tbody>
       </table>
@@ -241,8 +246,8 @@ function GroupRows({
               </tr>
             )
           })}
-      {!collapsed && showSum && group.rows.length > 0 ? (
-        <SummaryRow label="Sum" board={board} rows={group.rows} trailing={canEdit} />
+      {!collapsed && showSum && group.rows.some((row) => !row.omitFromRollup) ? (
+        <SummaryRow label="Sum" board={board} rows={group.rows.filter((row) => !row.omitFromRollup)} trailing={canEdit} />
       ) : null}
     </>
   )

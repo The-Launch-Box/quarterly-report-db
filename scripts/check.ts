@@ -9,7 +9,7 @@ import { publishWorkspace, readLiveSnapshot, saveSnapshot } from "../server/snap
 import { aggregateColumn, cellNumber, computeKpis } from "../src/data/metrics"
 import { parseWorkspace } from "../src/data/persist"
 import { reducer } from "../src/data/reducer"
-import { createSeedWorkspace, seedProblems, varianceStatus, withExpectedColumn } from "../src/data/seed"
+import { createSeedWorkspace, IMPROV_OPERATING_RESULTS, seedProblems, varianceStatus, withExpectedColumn, withImprovDeck } from "../src/data/seed"
 import { EXPECTED_COLUMN_ID, LABEL_COLUMN_ID, type Board, type Workspace } from "../src/data/types"
 
 function must<T>(value: T | undefined | null, message: string): T {
@@ -144,11 +144,73 @@ if (echelonRevenue.cells.status !== "On track") throw new Error("echelon revenue
 if (engineering.cells[EXPECTED_COLUMN_ID] !== "54") throw new Error("engineering expected plan")
 if (engineering.cells.status !== "On track") throw new Error("engineering forecast is inside 4% of plan")
 
+const improvGroup = must(ytd.groups.find((group) => group.id === "improv"), "improv ytd")
 const improvRevenue = must(
-  ytd.groups.find((group) => group.id === "improv")?.rows.find((row) => row.cells[LABEL_COLUMN_ID] === "Revenue"),
+  improvGroup.rows.find((row) => row.cells[LABEL_COLUMN_ID] === "Revenue"),
   "improv revenue",
 )
-if (improvRevenue.cells.status !== "Behind") throw new Error("improv revenue is more than 8% under expected")
+if (improvRevenue.cells[EXPECTED_COLUMN_ID] !== "3600000") throw new Error("improv revenue expected should be $3.6M")
+if (cellNumber(ytdColumn, improvRevenue, ytd.columns) !== 3_400_000) throw new Error("improv revenue YTD should be $3.4M")
+if (improvRevenue.cells.status !== "Watch") throw new Error("improv revenue is about 5.6% under the $3.6M comparison")
+const improvGross = must(
+  improvGroup.rows.find((row) => row.cells[LABEL_COLUMN_ID] === "Gross profit"),
+  "improv gross profit",
+)
+if (cellNumber(ytdColumn, improvGross, ytd.columns) !== 1_300_000) throw new Error("improv gross profit YTD should be $1.3M")
+const improvNet = must(
+  improvGroup.rows.find((row) => row.cells[LABEL_COLUMN_ID] === "Net income"),
+  "improv net income",
+)
+if (cellNumber(ytdColumn, improvNet, ytd.columns) !== 198_000) throw new Error("improv net income YTD should be $198k")
+if (improvGroup.operatingResults !== IMPROV_OPERATING_RESULTS) throw new Error("improv operating results missing")
+
+const improvHeads = computeKpis(headcount, "improv").find((kpi) => kpi.id === "q3-heads")
+if (!improvHeads || improvHeads.value !== "32") throw new Error(`improv headcount ${improvHeads?.value ?? "missing"}`)
+const aug = must(
+  headcount.groups.find((group) => group.id === "improv")?.rows.find((row) => row.cells[LABEL_COLUMN_ID] === "Aug 2025"),
+  "aug 2025",
+)
+if (aug.cells.q3 !== "30" || !aug.omitFromRollup) throw new Error("aug 2025 should stay out of the headcount total")
+
+const improvPlan = must(
+  seed.boards.find((board) => board.id === "revenue")?.groups.find((group) => group.id === "improv"),
+  "improv plan",
+)
+const plan2026 = must(
+  improvPlan.rows.find((row) => row.cells[LABEL_COLUMN_ID] === "2026 revenue"),
+  "2026 revenue",
+)
+if (plan2026.cells[EXPECTED_COLUMN_ID] !== "8100000") throw new Error("2026 revenue target")
+const plan2028 = must(
+  improvPlan.rows.find((row) => row.cells[LABEL_COLUMN_ID] === "2028 gross margin (50%)"),
+  "2028 gross margin",
+)
+if (plan2028.cells[EXPECTED_COLUMN_ID] !== "9000000" || !plan2028.omitFromRollup) throw new Error("2028 gross margin target")
+
+const roundTrip = must(parseWorkspace(JSON.parse(JSON.stringify(seed)) as unknown), "round trip")
+const roundNote = roundTrip.boards.find((board) => board.id === "ytd")?.groups.find((group) => group.id === "improv")?.operatingResults
+if (roundNote !== IMPROV_OPERATING_RESULTS) throw new Error("operating results dropped on save")
+const roundAug = roundTrip.boards
+  .find((board) => board.id === "headcount")
+  ?.groups.find((group) => group.id === "improv")
+  ?.rows.find((row) => row.cells[LABEL_COLUMN_ID] === "Aug 2025")
+if (!roundAug?.omitFromRollup) throw new Error("rollup flag dropped on save")
+
+const editedNote = reducer(seed, { type: "set-operating-results", groupId: "improv", value: "Backlog moved." })
+const savedNote = editedNote.boards.find((board) => board.id === "ytd")?.groups.find((group) => group.id === "improv")?.operatingResults
+if (savedNote !== "Backlog moved.") throw new Error("operating results did not save")
+
+const stale = structuredClone(seed)
+const staleImprov = must(stale.boards.find((board) => board.id === "ytd")?.groups.find((group) => group.id === "improv"), "stale improv")
+delete staleImprov.operatingResults
+const staleRevenue = must(staleImprov.rows.find((row) => row.cells[LABEL_COLUMN_ID] === "Net income"), "stale net income")
+staleRevenue.cells[LABEL_COLUMN_ID] = "EBITDA"
+const upgraded = withImprovDeck(stale)
+if (upgraded === stale) throw new Error("old improv board was left in place")
+const upgradedImprov = must(upgraded.boards.find((board) => board.id === "ytd")?.groups.find((group) => group.id === "improv"), "upgraded improv")
+if (upgradedImprov.operatingResults !== IMPROV_OPERATING_RESULTS) throw new Error("saved board did not pick up operating results")
+if (!upgradedImprov.rows.some((row) => row.cells[LABEL_COLUMN_ID] === "Net income")) throw new Error("saved board did not pick up net income")
+if (withImprovDeck(seed) !== seed) throw new Error("current improv deck was rewritten")
 const dxRevenue = must(
   ytd.groups.find((group) => group.id === "dxfoundation")?.rows.find((row) => row.cells[LABEL_COLUMN_ID] === "Revenue"),
   "dx revenue",

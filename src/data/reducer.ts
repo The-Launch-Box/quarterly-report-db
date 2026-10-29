@@ -11,6 +11,7 @@ export type WorkspaceAction =
   | { type: "add-company"; name: string }
   | { type: "rename-company"; groupId: string; name: string }
   | { type: "delete-company"; groupId: string }
+  | { type: "set-operating-results"; groupId: string; value: string }
   | { type: "replace"; workspace: Workspace }
 
 export function reducer(workspace: Workspace, action: WorkspaceAction): Workspace {
@@ -107,6 +108,13 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
         })),
       }
     }
+    case "set-operating-results":
+      return mapBoard(workspace, "ytd", (board) => ({
+        ...board,
+        groups: board.groups.map((group) =>
+          group.id === action.groupId ? { ...group, operatingResults: action.value } : group,
+        ),
+      }))
     case "replace":
       return action.workspace
     default: {
