@@ -83,7 +83,7 @@ export function ColumnResizeHandle({
       aria-valuenow={width}
       tabIndex={0}
       title="Drag to resize"
-      className="absolute top-0 -right-px z-40 h-full w-2 cursor-col-resize touch-none hover:bg-primary/50 focus-visible:bg-primary/50"
+      className="absolute inset-y-0 right-0 z-50 w-3 cursor-col-resize touch-none before:absolute before:inset-y-0 before:right-0 before:w-0.5 before:bg-border hover:before:bg-primary focus-visible:before:bg-primary"
       onPointerDown={onPointerDown}
       onClick={(event) => event.stopPropagation()}
       onKeyDown={(event) => {

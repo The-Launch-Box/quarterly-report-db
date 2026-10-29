@@ -233,8 +233,9 @@ function FirmTable({
           return (
             <td
               key={column.id}
+              style={{ width: widthOf(column), maxWidth: widthOf(column) }}
               className={cn(
-                "relative overflow-hidden border-b border-border-soft px-1 py-1 group-hover:bg-bg-raised",
+                "relative overflow-hidden border-b border-border-soft px-1 py-1 group-hover:bg-bg-raised [&_input]:max-w-full [&_input]:min-w-0",
                 nested ? "bg-bg-raised" : "bg-card",
                 column.id === LABEL_COLUMN_ID && "sticky left-0 z-10 border-r border-border-soft",
               )}
@@ -338,13 +339,14 @@ function FirmTable({
                 <th
                   key={column.id}
                   scope="col"
+                  style={{ width: widthOf(column), maxWidth: widthOf(column) }}
                   className={cn(
-                    "group/col relative sticky top-0 z-20 overflow-hidden border-b border-border bg-card px-2 py-2 text-left align-bottom text-[11px] font-medium tracking-widest text-muted-foreground uppercase",
+                    "group/col relative sticky top-0 z-20 border-b border-border bg-card px-2 py-2 text-left align-bottom text-[11px] font-medium tracking-widest text-muted-foreground uppercase",
                     column.id === LABEL_COLUMN_ID && "left-0 z-30 border-r border-border-soft",
                     isNumeric(column.kind) && "text-right",
                   )}
                 >
-                  <div className={cn("flex items-center gap-1", isNumeric(column.kind) && "justify-end")}>
+                  <div className={cn("flex min-w-0 items-center gap-1 overflow-hidden pr-2", isNumeric(column.kind) && "justify-end")}>
                     <ColumnTitle column={column} onRename={canEdit ? (name) => onRenameColumn(column.id, name) : undefined} />
                     {canEdit && column.id !== LABEL_COLUMN_ID ? (
                       <Button
@@ -369,7 +371,7 @@ function FirmTable({
                 </th>
               ))}
               {canEdit ? (
-                <th scope="col" className="sticky top-0 z-20 w-12 border-b border-border bg-card px-1">
+                <th scope="col" className="sticky top-0 z-10 w-12 border-b border-border bg-card px-1">
                   <Button variant="ghost" size="icon" aria-label={`Add column to ${group.name}`} onClick={onAddColumn}>
                     <Plus />
                   </Button>
