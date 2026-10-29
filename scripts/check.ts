@@ -162,6 +162,28 @@ if (reducer(custom, { type: "rename-board", boardId: "ytd", title: "Nope" }).boa
 }
 const renamed = reducer(custom, { type: "rename-board", boardId: "board-pipeline", title: "Hiring" })
 if (renamed.boards.find((board) => board.id === "board-pipeline")?.title !== "Hiring") throw new Error("custom board was not renamed")
+if (pipeline.subtitle !== "") throw new Error("custom board should start without a description")
+const described = reducer(custom, { type: "set-board-subtitle", boardId: "board-pipeline", subtitle: "  Open roles  " })
+if (described.boards.find((board) => board.id === "board-pipeline")?.subtitle !== "Open roles") {
+  throw new Error("custom board description was not saved")
+}
+const cleared = reducer(described, { type: "set-board-subtitle", boardId: "board-pipeline", subtitle: "   " })
+if (cleared.boards.find((board) => board.id === "board-pipeline")?.subtitle !== "") {
+  throw new Error("custom board description was not cleared")
+}
+if (
+  reducer(custom, { type: "set-board-subtitle", boardId: "ytd", subtitle: "Nope" }).boards.find((board) => board.id === "ytd")
+    ?.subtitle === "Nope"
+) {
+  throw new Error("ytd description was edited")
+}
+if (
+  reducer(custom, { type: "set-board-subtitle", boardId: "board-pipeline", subtitle: "x".repeat(401) }).boards.find(
+    (board) => board.id === "board-pipeline",
+  )?.subtitle !== ""
+) {
+  throw new Error("an overlong board description was saved")
+}
 const pipelineRow = must(pipelineGroup.rows[0], "pipeline row")
 const titled = reducer(custom, {
   type: "set-cell",

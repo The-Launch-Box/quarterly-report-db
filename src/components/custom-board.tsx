@@ -65,9 +65,11 @@ export function CustomBoardScreen({ boardId }: { boardId: string }) {
             canEdit={canEdit}
             onRename={(title) => dispatch({ type: "rename-board", boardId, title })}
           />
-          <p className="mt-2 max-w-2xl text-sm text-muted-foreground">
-            Click a column name to retitle it. Each cell can carry its own title. Add columns and rows as you need them.
-          </p>
+          <BoardDescription
+            subtitle={board.subtitle}
+            canEdit={canEdit}
+            onChange={(subtitle) => dispatch({ type: "set-board-subtitle", boardId, subtitle })}
+          />
         </div>
         {canEdit ? (
           <div className="flex flex-wrap items-center gap-2">
@@ -259,6 +261,69 @@ function BoardTitle({ title, canEdit, onRename }: { title: string; canEdit: bool
         }
       }}
       className="mt-1 w-full max-w-2xl bg-transparent font-display text-4xl leading-none uppercase text-foreground outline-none"
+    />
+  )
+}
+
+function BoardDescription({
+  subtitle,
+  canEdit,
+  onChange,
+}: {
+  subtitle: string
+  canEdit: boolean
+  onChange: (subtitle: string) => void
+}) {
+  const [editing, setEditing] = useState(false)
+  const [draft, setDraft] = useState(subtitle)
+  const cancel = useRef(false)
+  useEffect(() => setDraft(subtitle), [subtitle])
+
+  if (!editing || !canEdit) {
+    if (!subtitle && !canEdit) return null
+    if (!canEdit) return <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{subtitle}</p>
+    return (
+      <button
+        type="button"
+        className={cn("mt-2 max-w-2xl text-left text-sm", subtitle ? "text-muted-foreground" : "text-fg-faint")}
+        title={subtitle ? "Edit description" : "Add a description"}
+        onClick={() => setEditing(true)}
+      >
+        {subtitle || "Add a description"}
+      </button>
+    )
+  }
+
+  return (
+    <textarea
+      autoFocus
+      aria-label="Board description"
+      maxLength={400}
+      rows={2}
+      value={draft}
+      onChange={(event) => setDraft(event.target.value)}
+      onBlur={() => {
+        setEditing(false)
+        if (cancel.current) {
+          cancel.current = false
+          setDraft(subtitle)
+          return
+        }
+        const next = draft.trim().replace(/\s+/g, " ")
+        if (next !== subtitle) onChange(next)
+        else setDraft(subtitle)
+      }}
+      onKeyDown={(event) => {
+        if (event.key === "Enter" && !event.shiftKey) {
+          event.preventDefault()
+          event.currentTarget.blur()
+        }
+        if (event.key === "Escape") {
+          cancel.current = true
+          event.currentTarget.blur()
+        }
+      }}
+      className="mt-2 w-full max-w-2xl resize-none bg-transparent text-sm text-muted-foreground outline-none"
     />
   )
 }

@@ -17,6 +17,7 @@ export type WorkspaceAction =
   | { type: "set-firm-metric"; boardId: string; groupId: string; columnId: string; value: string }
   | { type: "add-board"; boardId: string; firmId: string; title: string }
   | { type: "rename-board"; boardId: string; title: string }
+  | { type: "set-board-subtitle"; boardId: string; subtitle: string }
   | { type: "delete-board"; boardId: string }
   | { type: "replace"; workspace: Workspace }
 
@@ -135,6 +136,13 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
       const title = action.title.trim()
       if (!title || title.length > 60) return workspace
       return mapBoard(workspace, action.boardId, (board) => (board.firmId ? { ...board, title } : board))
+    }
+    case "set-board-subtitle": {
+      const subtitle = action.subtitle.trim().replace(/\s+/g, " ")
+      if (subtitle.length > 400) return workspace
+      const board = workspace.boards.find((item) => item.id === action.boardId)
+      if (!board?.firmId || board.subtitle === subtitle) return workspace
+      return mapBoard(workspace, action.boardId, (current) => ({ ...current, subtitle }))
     }
     case "delete-board":
       return {
