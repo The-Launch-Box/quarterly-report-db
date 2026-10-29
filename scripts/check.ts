@@ -11,6 +11,7 @@ import { publishWorkspace, readLiveSnapshot, saveSnapshot } from "../server/snap
 import {
   aggregateColumn,
   cellNumber,
+  chartTables,
   computeKpis,
   defaultBarColumnIds,
   defaultChartGrain,
@@ -20,6 +21,7 @@ import {
   formatColumnValue,
   listCompanies,
   plotRows,
+  plotTable,
   profitMarginChart,
   uniqueLabels,
 } from "../src/data/metrics"
@@ -632,6 +634,26 @@ const renamedSlice = headcountMix(
   "improv",
 )?.termination[0]
 if (renamedSlice?.label !== "Let go") throw new Error("the pie did not use the table label")
+const chartable = chartTables(headcount).map((table) => table.title)
+if (chartable.join("|") !== "Headcount|Month by Month|Termination type|Length of service") {
+  throw new Error(`headcount charts missed a table: ${chartable.join("|")}`)
+}
+const terminationTable = must(chartTables(headcount).find((table) => table.title === "Termination type"), "termination chart table")
+const terminationPlot = plotTable(headcount, terminationTable, "improv", "line", "")
+if (terminationPlot.map((row) => `${row.label} ${row.values.share}`).join(", ") !== "Involuntary Termination 0.7, Voluntary Unspecified 0.15, Non-Regrettable 0.1, Regrettable 0.05") {
+  throw new Error("termination pie did not read the termination table")
+}
+const monthTable = must(chartTables(headcount).find((table) => table.title === "Month by Month"), "month chart table")
+const monthPlot = plotTable(headcount, monthTable, "improv", "line", "")
+if (monthPlot[0]?.label !== "Aug 2025" || monthPlot[0]?.values.count !== 30 || monthPlot.at(-1)?.values.count !== 32) {
+  throw new Error("month chart did not read Month by Month")
+}
+const ytdTables = chartTables(ytd).map((table) => table.title)
+if (ytdTables[0] !== "Financial results" || !ytdTables.includes("Ratios")) throw new Error("YTD charts missed a table")
+const ratioChart = must(chartTables(ytd).find((table) => table.id === RATIOS_TABLE_ID), "ratio chart table")
+const ratioPlot = plotTable(ytd, ratioChart, "improv", "line", "")
+const grossSlice = ratioPlot.find((row) => row.label === "Gross profit margin")
+if (grossSlice?.values.ytd !== 0.38) throw new Error("ratio chart did not read the ratio table")
 const staleMix = structuredClone(seed)
 const staleBoard = must(staleMix.boards.find((board) => board.id === "headcount"), "stale headcount board")
 delete staleBoard.headcountTables

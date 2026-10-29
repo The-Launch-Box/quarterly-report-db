@@ -1,6 +1,16 @@
 import { formatCompactCurrency, formatCurrency, formatNumber, formatPercent } from "./format"
 import { HEADCOUNT_TERMINATION_TABLE_ID, HEADCOUNT_TENURE_TABLE_ID } from "./seed"
 import { EXPECTED_COLUMN_ID, LABEL_COLUMN_ID, type Board, type BoardGroup, type BoardRow, type Column, type Workspace } from "./types"
+import { RATIO_COLUMNS, RATIOS_TABLE_ID, STATEMENT_TABLE_ID, ytdSectionOrder, ytdSectionTitle } from "./ytd-tables"
+
+/** The board's own table, when it is not the YTD income statement. */
+export const MAIN_CHART_TABLE_ID = "main"
+
+export interface ChartTable {
+  id: string
+  title: string
+  columns: Column[]
+}
 
 export interface KpiResult {
   id: string
@@ -167,34 +177,88 @@ export function computeKpis(board: Board, companyId: string): KpiResult[] {
   return results
 }
 
+/** Tables a graph can plot: the board table, YTD ratios, and any added table. */
+export function chartTables(board: Board): ChartTable[] {
+  if (board.firmId) return []
+  const tables: ChartTable[] = []
+  if (board.id === "ytd") {
+    tables.push({ id: STATEMENT_TABLE_ID, title: ytdSectionTitle(board, STATEMENT_TABLE_ID), columns: board.columns })
+    tables.push({ id: RATIOS_TABLE_ID, title: ytdSectionTitle(board, RATIOS_TABLE_ID), columns: RATIO_COLUMNS })
+  } else {
+    tables.push({ id: MAIN_CHART_TABLE_ID, title: board.title, columns: board.columns })
+  }
+  for (const tableId of ytdSectionOrder(board)) {
+    if (tableId === STATEMENT_TABLE_ID || tableId === RATIOS_TABLE_ID) continue
+    const custom = board.ytdCustomTables?.find((table) => table.id === tableId)
+    if (!custom) continue
+    tables.push({ id: custom.id, title: custom.title, columns: custom.columns })
+  }
+  return tables
+}
+
+/** Firm totals sum the main table only when that board already rolls its rows up. */
+export function tableAggregates(board: Board, tableId: string): boolean {
+  if (tableId !== MAIN_CHART_TABLE_ID && tableId !== STATEMENT_TABLE_ID) return false
+  return board.aggregateRows
+}
+
+export function tableLabels(board: Board, tableId: string): string[] {
+  const seen = new Set<string>()
+  const labels: string[] = []
+  const skipMeasure = tableId === MAIN_CHART_TABLE_ID || tableId === STATEMENT_TABLE_ID
+  for (const group of board.groups) {
+    for (const row of rowsForTable(group, tableId)) {
+      if (skipMeasure && row.measure) continue
+      const label = (row.cells[LABEL_COLUMN_ID] ?? "").trim()
+      if (!label || seen.has(label)) continue
+      seen.add(label)
+      labels.push(label)
+    }
+  }
+  return labels
+}
+
 export function plotRows(board: Board, companyId: string, grain: "company" | "line", lineFilter: string): PlotRow[] {
+  const table = chartTables(board).find((item) => item.id === (board.id === "ytd" ? STATEMENT_TABLE_ID : MAIN_CHART_TABLE_ID))
+  if (!table) return []
+  return plotTable(board, table, companyId, grain, lineFilter)
+}
+
+/** One mark per firm, or one mark per row, from a single table. */
+export function plotTable(
+  board: Board,
+  table: ChartTable,
+  companyId: string,
+  grain: "company" | "line",
+  lineFilter: string,
+): PlotRow[] {
   const groups = companyId === "all" ? board.groups : board.groups.filter((group) => group.id === companyId)
-  const columns = board.columns.filter(isValueColumn)
+  const columns = table.columns.filter(isValueColumn)
+  const skipMeasure = table.id === MAIN_CHART_TABLE_ID || table.id === STATEMENT_TABLE_ID
 
   const valuesFor = (rows: BoardRow[]): Record<string, number | null> => {
     const values: Record<string, number | null> = {}
-    for (const column of columns) {
-      values[column.id] = aggregateColumn(column, rows, board.columns)
-    }
+    for (const column of columns) values[column.id] = aggregateColumn(column, rows, table.columns)
     return values
   }
 
   if (grain === "company") {
-    if (!board.aggregateRows && !lineFilter) return []
+    if (!tableAggregates(board, table.id) && !lineFilter) return []
     return groups.map((group) => {
-      const source = !lineFilter ? group.rows : group.rows.filter((row) => labelsMatch(row, lineFilter))
+      const rows = rowsForTable(group, table.id)
+      const source = !lineFilter ? rows : rows.filter((row) => labelsMatch(row, lineFilter))
       return { key: group.id, groupId: group.id, label: group.name, values: valuesFor(source) }
     })
   }
 
   const plots: PlotRow[] = []
   for (const group of groups) {
-    for (const row of group.rows) {
-      if (row.measure) continue
+    for (const row of rowsForTable(group, table.id)) {
+      if (skipMeasure && row.measure) continue
       const label = (row.cells[LABEL_COLUMN_ID] ?? "").trim()
       if (lineFilter && label.toLowerCase() !== lineFilter.toLowerCase()) continue
       const values: Record<string, number | null> = {}
-      for (const column of columns) values[column.id] = cellNumber(column, row, board.columns)
+      for (const column of columns) values[column.id] = cellNumber(column, row, table.columns)
       plots.push({
         key: row.id,
         groupId: group.id,
@@ -204,6 +268,12 @@ export function plotRows(board: Board, companyId: string, grain: "company" | "li
     }
   }
   return plots
+}
+
+function rowsForTable(group: BoardGroup, tableId: string): BoardRow[] {
+  if (tableId === RATIOS_TABLE_ID) return group.ratios ?? []
+  if (tableId === MAIN_CHART_TABLE_ID || tableId === STATEMENT_TABLE_ID) return group.rows
+  return group.customRows?.[tableId] ?? []
 }
 
 export function valueColumns(board: Board): Column[] {

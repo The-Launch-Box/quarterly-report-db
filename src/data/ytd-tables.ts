@@ -1,4 +1,12 @@
-import type { Board } from "./types"
+import { EXPECTED_COLUMN_ID, LABEL_COLUMN_ID, type Board, type Column } from "./types"
+
+/** Columns on the YTD ratio table. */
+export const RATIO_COLUMNS: Column[] = [
+  { id: LABEL_COLUMN_ID, name: "Ratio", kind: "text" },
+  { id: EXPECTED_COLUMN_ID, name: "Target", kind: "percent", decimals: 0 },
+  { id: "q3", name: "Q3", kind: "percent", decimals: 0 },
+  { id: "ytd", name: "YTD", kind: "percent", decimals: 0 },
+]
 
 /** The income statement on YTD. */
 export const STATEMENT_TABLE_ID = "statement"

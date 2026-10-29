@@ -21,20 +21,23 @@ import {
 import { BRAND_MARK, BRAND_SERIES, portcoId } from "@/data/brands"
 import { formatNumber, shortName } from "@/data/format"
 import {
+  chartTables,
   defaultBarColumnIds,
   defaultChartGrain,
   defaultLineFilter,
   defaultPieColumnId,
   defaultScatterColumnIds,
   formatColumnValue,
-  headcountMix,
-  plotRows,
+  isValueColumn,
+  MAIN_CHART_TABLE_ID,
+  plotTable,
   profitMarginChart,
-  uniqueLabels,
-  valueColumns,
-  type MixSlice,
+  tableAggregates,
+  tableLabels,
+  type ChartTable,
   type PlotRow,
 } from "@/data/metrics"
+import { STATEMENT_TABLE_ID } from "@/data/ytd-tables"
 import type { Board, Column, ColumnKind } from "@/data/types"
 import { Field, Segmented, Select } from "@/components/ui"
 
@@ -50,20 +53,26 @@ const SERIES_COLORS = [
 type ChartType = "bar" | "pie" | "scatter" | "margins"
 type Grain = "company" | "line"
 
+interface MetricChoice {
+  bars: string[]
+  pie: string
+  x: string
+  y: string
+}
+
+const PIE_COLORS = ["#70ad47", "#e04b4b", "#ed7d31", "#5b9bd5"] as const
+
 export function BoardChart({ board, companyId }: { board: Board; companyId: string }) {
-  const columns = valueColumns(board).filter((column) => column.scope !== "firm")
+  const tables = chartTables(board)
   const marginsAvailable = board.id === "ytd"
   const [chartType, setChartType] = useState<ChartType>("bar")
   const [grain, setGrain] = useState<Grain>(() => defaultChartGrain(board))
   const [lineFilter, setLineFilter] = useState(() => defaultLineFilter(board))
-  const [barSelection, setBarSelection] = useState<string[]>(() => defaultBarColumnIds(board))
-  const [pieId, setPieId] = useState(() => defaultPieColumnId(board))
-  const [axes, setAxes] = useState(() => {
-    const [x, y] = defaultScatterColumnIds(board)
-    return { x, y }
-  })
+  const [picked, setPicked] = useState<string[]>(() => (tables[0] ? [tables[0].id] : []))
+  const [choices, setChoices] = useState<Record<string, MetricChoice>>({})
 
-  if (columns.length === 0) {
+  const plottable = tables.filter((table) => table.columns.some((column) => isValueColumn(column) && column.scope !== "firm"))
+  if (plottable.length === 0) {
     return (
       <section className="rounded-lg border border-border bg-card px-5 py-6">
         <h2 className="text-xl">Graph</h2>
@@ -72,25 +81,34 @@ export function BoardChart({ board, companyId }: { board: Board; companyId: stri
     )
   }
 
-  const labels = uniqueLabels(board)
-  const lineRequired = grain === "company" && !board.aggregateRows
-  const activeLine = lineRequired ? (labels.includes(lineFilter) ? lineFilter : labels[0] ?? "") : lineFilter && labels.includes(lineFilter) ? lineFilter : ""
-  const known = new Set(columns.map((column) => column.id))
-  const barIds = barSelection.filter((id) => known.has(id))
-  const activePie = known.has(pieId) ? pieId : columns[0]?.id ?? ""
-  const xId = known.has(axes.x) ? axes.x : columns[0]?.id ?? ""
-  const yId = known.has(axes.y) ? axes.y : columns[1]?.id ?? columns[0]?.id ?? ""
-  const allPlots = plotRows(board, companyId, grain, activeLine)
-  const plots = allPlots.slice(0, 40)
-  const hidden = allPlots.length - plots.length
-  const headcountPies = chartType === "pie" && board.id === "headcount"
+  const selected = plottable.filter((table) => picked.includes(table.id))
+  const shown = selected.length > 0 ? selected : plottable.slice(0, 1)
+  const labels = [...new Set(shown.flatMap((table) => tableLabels(board, table.id)))]
+  const lineRequired = grain === "company" && shown.some((table) => !tableAggregates(board, table.id))
+  const sharedLine = labels.includes(lineFilter) ? lineFilter : ""
+
+  function toggleTable(tableId: string) {
+    const present = picked.filter((id) => plottable.some((table) => table.id === id))
+    const active = present.length > 0 ? present : shown.map((table) => table.id)
+    const next = active.includes(tableId) ? active.filter((id) => id !== tableId) : [...active, tableId]
+    if (next.length === 0) return
+    setPicked(next)
+    const nextTables = plottable.filter((table) => next.includes(table.id))
+    if (nextTables.every((table) => !tableAggregates(board, table.id))) setGrain("line")
+  }
+
+  function choiceFor(table: ChartTable): MetricChoice {
+    return resolveChoice(board, table, choices[table.id])
+  }
+
+  function updateChoice(tableId: string, next: MetricChoice) {
+    setChoices((current) => ({ ...current, [tableId]: next }))
+  }
 
   return (
     <section className="rounded-lg border border-border bg-card px-5 py-5" aria-label="Graph">
       <h2 className="text-xl">{chartTitle(chartType)}</h2>
-      <p className="mt-1 text-sm text-muted-foreground">
-        {chartDescription(chartType, grain, board.aggregateRows, activeLine, companyId, board.id)}
-      </p>
+      <p className="mt-1 text-sm text-muted-foreground">{chartDescription(chartType, grain, shown.length > 1)}</p>
       <div className="mt-4 flex flex-wrap items-end gap-4">
         <Segmented
           label="Graph type"
@@ -103,25 +121,25 @@ export function BoardChart({ board, companyId }: { board: Board; companyId: stri
             ...(marginsAvailable ? [{ value: "margins" as const, label: "Profit margins", icon: LineChartIcon }] : []),
           ]}
         />
-        {headcountPies || chartType === "margins" ? null : (
-        <Field label="Rows" htmlFor="chart-grain">
-          <Select
-            id="chart-grain"
-            value={grain}
-            onChange={(value) => setGrain(value === "line" ? "line" : "company")}
-            options={[
-              { value: "company", label: "Firms" },
-              { value: "line", label: "Line items" },
-            ]}
-            className="w-40"
-          />
-        </Field>
+        {chartType === "margins" ? null : (
+          <Field label="Rows" htmlFor="chart-grain">
+            <Select
+              id="chart-grain"
+              value={grain}
+              onChange={(value) => setGrain(value === "line" ? "line" : "company")}
+              options={[
+                { value: "company", label: "Firms" },
+                { value: "line", label: "Line items" },
+              ]}
+              className="w-40"
+            />
+          </Field>
         )}
-        {headcountPies || chartType === "margins" ? null : lineRequired || grain === "line" ? (
+        {chartType === "margins" || (!lineRequired && grain !== "line") ? null : (
           <Field label="Line" htmlFor="chart-line">
             <Select
               id="chart-line"
-              value={lineRequired ? activeLine : activeLine || "all"}
+              value={lineRequired ? sharedLine || labels[0] || "" : sharedLine || "all"}
               onChange={(value) => setLineFilter(value === "all" ? "" : value)}
               options={[
                 ...(lineRequired ? [] : [{ value: "all", label: "All lines" }]),
@@ -130,35 +148,122 @@ export function BoardChart({ board, companyId }: { board: Board; companyId: stri
               className="w-44"
             />
           </Field>
-        ) : null}
-        {headcountPies || chartType !== "pie" ? null : (
-          <ColumnSelect id="chart-pie" label="Value" columns={columns} value={activePie} onChange={setPieId} />
         )}
-        {chartType === "scatter" ? (
-          <>
-            <ColumnSelect id="chart-x" label="X axis" columns={columns} value={xId} onChange={(id) => setAxes((current) => ({ ...current, x: id }))} />
-            <ColumnSelect id="chart-y" label="Y axis" columns={columns} value={yId} onChange={(id) => setAxes((current) => ({ ...current, y: id }))} />
-          </>
-        ) : null}
       </div>
-      {chartType === "bar" ? (
+      {chartType === "margins" ? null : (
         <div className="mt-4 flex flex-wrap gap-x-4 gap-y-2">
-          {columns.map((column) => (
-            <label key={column.id} htmlFor={`series-${column.id}`} className="inline-flex items-center gap-2 text-sm">
+          <p className="basis-full text-[11px] uppercase tracking-widest text-muted-foreground">Tables</p>
+          {plottable.map((table) => (
+            <label key={table.id} htmlFor={`chart-table-${table.id}`} className="inline-flex items-center gap-2 text-sm">
               <input
-                id={`series-${column.id}`}
+                id={`chart-table-${table.id}`}
                 type="checkbox"
                 className="size-4 accent-primary"
-                checked={barIds.includes(column.id)}
-                onChange={(event) => {
-                  const checked = event.target.checked
-                  setBarSelection((current) => {
-                    const present = current.filter((id) => known.has(id))
-                    if (!checked) return present.filter((id) => id !== column.id)
-                    const sameKind = present.filter((id) => columns.find((item) => item.id === id)?.kind === column.kind)
-                    return sameKind.includes(column.id) ? sameKind : [...sameKind, column.id]
-                  })
-                }}
+                checked={shown.some((item) => item.id === table.id)}
+                onChange={() => toggleTable(table.id)}
+              />
+              {table.title}
+            </label>
+          ))}
+        </div>
+      )}
+      {chartType === "margins" ? null : (
+        <div className="mt-4 flex flex-col gap-4">
+          {shown.map((table) => {
+            const columns = metricColumns(table)
+            const choice = choiceFor(table)
+            return (
+              <TableMetrics
+                key={table.id}
+                table={table}
+                columns={columns}
+                choice={choice}
+                chartType={chartType}
+                named={shown.length > 1}
+                onChange={(next) => updateChoice(table.id, next)}
+              />
+            )
+          })}
+        </div>
+      )}
+      {chartType === "margins" ? (
+        <div className="mt-4 h-[340px] w-full min-w-0">
+          <MarginView board={board} companyId={companyId} />
+        </div>
+      ) : (
+        <div className={chartType === "pie" ? "mt-4 grid gap-6 md:grid-cols-2" : "mt-4 flex flex-col gap-6"}>
+          {shown.map((table) => {
+            const columns = metricColumns(table)
+            const choice = choiceFor(table)
+            const line = lineFor(board, table, grain, lineFilter)
+            const allPlots = plotTable(board, table, companyId, grain, line)
+            const plots = allPlots.slice(0, 40)
+            const hidden = allPlots.length - plots.length
+            return (
+              <div key={table.id} className={chartType === "pie" ? "min-w-0" : "min-w-0"}>
+                {chartType === "pie" ? null : shown.length > 1 ? <h3 className="mb-2 text-base">{table.title}</h3> : null}
+                <div className={chartType === "pie" ? "min-w-0" : "h-[340px] w-full min-w-0"}>
+                  {chartType === "bar" ? (
+                    <BarView companyId={companyId} plots={plots} columns={columns} barIds={choice.bars} />
+                  ) : chartType === "pie" ? (
+                    <TableDonut
+                      title={table.title}
+                      plots={plots}
+                      column={columns.find((column) => column.id === choice.pie)}
+                      companyId={companyId}
+                      grain={grain}
+                    />
+                  ) : (
+                    <ScatterView
+                      companyId={companyId}
+                      plots={plots}
+                      xColumn={columns.find((column) => column.id === choice.x)}
+                      yColumn={columns.find((column) => column.id === choice.y)}
+                    />
+                  )}
+                </div>
+                {hidden > 0 ? <p className="mt-2 text-xs text-muted-foreground">Showing 40 marks. {hidden} more are hidden.</p> : null}
+              </div>
+            )
+          })}
+        </div>
+      )}
+    </section>
+  )
+}
+
+function TableMetrics({
+  table,
+  columns,
+  choice,
+  chartType,
+  named,
+  onChange,
+}: {
+  table: ChartTable
+  columns: Column[]
+  choice: MetricChoice
+  chartType: ChartType
+  named: boolean
+  onChange: (choice: MetricChoice) => void
+}) {
+  if (columns.length === 0) {
+    return <p className="text-sm text-muted-foreground">{table.title} has no numeric columns yet.</p>
+  }
+  return (
+    <div className="flex flex-wrap items-end gap-4">
+      {named ? <p className="min-w-28 text-sm font-medium">{table.title}</p> : null}
+      {chartType === "bar" ? (
+        <div className="flex flex-wrap gap-x-4 gap-y-2">
+          <p className="basis-full text-[11px] uppercase tracking-widest text-muted-foreground">Metrics</p>
+          {columns.map((column) => (
+            <label key={column.id} htmlFor={`series-${table.id}-${column.id}`} className="inline-flex items-center gap-2 text-sm">
+              <input
+                id={`series-${table.id}-${column.id}`}
+                type="checkbox"
+                className="size-4 accent-primary"
+                checked={choice.bars.includes(column.id)}
+                onChange={(event) => onChange({ ...choice, bars: nextBars(columns, choice.bars, column, event.target.checked) })}
               />
               {column.name}
             </label>
@@ -166,29 +271,81 @@ export function BoardChart({ board, companyId }: { board: Board; companyId: stri
           <p className="basis-full text-xs text-muted-foreground">A bar graph uses one column type.</p>
         </div>
       ) : null}
-      <div className={headcountPies ? "mt-4 w-full min-w-0" : "mt-4 h-[340px] w-full min-w-0"}>
-        {chartType === "bar" ? (
-          <BarView companyId={companyId} plots={plots} columns={columns} barIds={barIds} />
-        ) : headcountPies ? (
-          <HeadcountMixView board={board} companyId={companyId} />
-        ) : chartType === "pie" ? (
-          <PieView companyId={companyId} plots={plots} column={columns.find((column) => column.id === activePie)} />
-        ) : chartType === "margins" ? (
-          <MarginView board={board} companyId={companyId} />
-        ) : (
-          <ScatterView
-            companyId={companyId}
-            plots={plots}
-            xColumn={columns.find((column) => column.id === xId)}
-            yColumn={columns.find((column) => column.id === yId)}
-          />
-        )}
-      </div>
-      {!headcountPies && chartType !== "margins" && hidden > 0 ? (
-        <p className="mt-2 text-xs text-muted-foreground">Showing 40 marks. {hidden} more are hidden.</p>
+      {chartType === "pie" ? (
+        <div className="flex flex-wrap gap-x-4 gap-y-2">
+          <p className="basis-full text-[11px] uppercase tracking-widest text-muted-foreground">Metric</p>
+          {columns.map((column) => (
+            <label key={column.id} htmlFor={`pie-${table.id}-${column.id}`} className="inline-flex items-center gap-2 text-sm">
+              <input
+                id={`pie-${table.id}-${column.id}`}
+                type="checkbox"
+                className="size-4 accent-primary"
+                checked={choice.pie === column.id}
+                onChange={() => onChange({ ...choice, pie: column.id })}
+              />
+              {column.name}
+            </label>
+          ))}
+        </div>
       ) : null}
-    </section>
+      {chartType === "scatter" ? (
+        <>
+          <ColumnSelect
+            id={`chart-x-${table.id}`}
+            label="X axis"
+            columns={columns}
+            value={choice.x}
+            onChange={(id) => onChange({ ...choice, x: id })}
+          />
+          <ColumnSelect
+            id={`chart-y-${table.id}`}
+            label="Y axis"
+            columns={columns}
+            value={choice.y}
+            onChange={(id) => onChange({ ...choice, y: id })}
+          />
+        </>
+      ) : null}
+    </div>
   )
+}
+
+function metricColumns(table: ChartTable): Column[] {
+  return table.columns.filter((column) => isValueColumn(column) && column.scope !== "firm")
+}
+
+function resolveChoice(board: Board, table: ChartTable, saved: MetricChoice | undefined): MetricChoice {
+  const columns = metricColumns(table)
+  const ids = new Set(columns.map((column) => column.id))
+  const main = table.id === MAIN_CHART_TABLE_ID || table.id === STATEMENT_TABLE_ID
+  const fallbackBars = main ? defaultBarColumnIds(board).filter((id) => ids.has(id)) : []
+  const first = columns[0]?.id ?? ""
+  const second = columns[1]?.id ?? first
+  const [defaultX, defaultY] = main ? defaultScatterColumnIds(board) : [first, second]
+  const bars = (saved?.bars ?? (fallbackBars.length > 0 ? fallbackBars : first ? [first] : [])).filter((id) => ids.has(id))
+  const kind = columns.find((column) => column.id === bars[0])?.kind
+  const sameKind = kind ? bars.filter((id) => columns.find((column) => column.id === id)?.kind === kind) : []
+  return {
+    bars: sameKind.length > 0 ? sameKind : first ? [first] : [],
+    pie: saved && ids.has(saved.pie) ? saved.pie : main && ids.has(defaultPieColumnId(board)) ? defaultPieColumnId(board) : first,
+    x: saved && ids.has(saved.x) ? saved.x : ids.has(defaultX) ? defaultX : first,
+    y: saved && ids.has(saved.y) ? saved.y : ids.has(defaultY) ? defaultY : second,
+  }
+}
+
+function lineFor(board: Board, table: ChartTable, grain: Grain, lineFilter: string): string {
+  const labels = tableLabels(board, table.id)
+  if (grain === "line") return labels.includes(lineFilter) ? lineFilter : ""
+  if (!tableAggregates(board, table.id)) return labels.includes(lineFilter) ? lineFilter : labels[0] ?? ""
+  return labels.includes(lineFilter) ? lineFilter : ""
+}
+
+function nextBars(columns: Column[], current: string[], column: Column, checked: boolean): string[] {
+  const known = new Set(columns.map((item) => item.id))
+  const present = current.filter((id) => known.has(id))
+  if (!checked) return present.filter((id) => id !== column.id)
+  const sameKind = present.filter((id) => columns.find((item) => item.id === id)?.kind === column.kind)
+  return sameKind.includes(column.id) ? sameKind : [...sameKind, column.id]
 }
 
 function BarView({
@@ -260,33 +417,35 @@ function BarView({
   )
 }
 
-function HeadcountMixView({ board, companyId }: { board: Board; companyId: string }) {
-  const mix = headcountMix(board, companyId)
-  if (!mix) {
-    return (
-      <div className="flex h-40 items-center justify-center text-center text-sm text-muted-foreground">
-        This firm has no termination or tenure mix.
-      </div>
-    )
-  }
-  return (
-    <div className="grid gap-6 md:grid-cols-2">
-      <MixDonut title="Termination Type" slices={mix.termination} />
-      <MixDonut title="Length of Service" slices={mix.tenure} />
-    </div>
-  )
-}
-
-function MixDonut({ title, slices }: { title: string; slices: MixSlice[] }) {
+function TableDonut({
+  title,
+  plots,
+  column,
+  companyId,
+  grain,
+}: {
+  title: string
+  plots: PlotRow[]
+  column: Column | undefined
+  companyId: string
+  grain: Grain
+}) {
+  if (!column) return <EmptyPlot message="Choose a metric." />
+  const slices = plots.flatMap((row, index) => {
+    const value = row.values[column.id]
+    if (value === undefined || value === null || value <= 0) return []
+    const color = grain === "line" ? (PIE_COLORS[index % PIE_COLORS.length] ?? PIE_COLORS[0]) : markColor(row.groupId, index, companyId)
+    return [{ id: row.key, label: row.label, value, display: formatColumnValue(column, value), color }]
+  })
   const [first, second] = centerLines(title)
   if (slices.length === 0) {
-    return <p className="text-sm text-muted-foreground">{title} has no figures yet.</p>
+    return <EmptyPlot message="No positive values to graph. Pie slices skip zero and negative numbers." />
   }
   return (
     <div
       className="flex flex-wrap items-center gap-4"
       role="img"
-      aria-label={`${title}: ${slices.map((slice) => `${slice.label} ${slice.value}%`).join(", ")}`}
+      aria-label={`${title}: ${slices.map((slice) => `${slice.label} ${slice.display}`).join(", ")}`}
     >
       <div className="relative h-52 w-52 shrink-0">
         <ResponsiveContainer width="100%" height="100%">
@@ -322,7 +481,7 @@ function MixDonut({ title, slices }: { title: string; slices: MixSlice[] }) {
           <li key={slice.id} className="flex items-start gap-2 text-sm text-foreground">
             <span className="mt-1 size-2.5 shrink-0 rounded-sm" style={{ background: slice.color }} />
             <span>
-              {slice.label} {slice.value}%
+              {slice.label} {slice.display}
             </span>
           </li>
         ))}
@@ -335,31 +494,6 @@ function centerLines(title: string): [string, string] {
   const words = title.split(" ")
   const last = words.pop() ?? title
   return [words.join(" ") || title, last]
-}
-
-function PieView({ companyId, plots, column }: { companyId: string; plots: PlotRow[]; column: Column | undefined }) {
-  if (!column) return <EmptyPlot message="Choose a column." />
-  const slices = plots.flatMap((row, index) => {
-    const value = row.values[column.id]
-    if (value === undefined || value === null || value <= 0) return []
-    return [{ key: row.key, label: shortName(row.label), full: row.label, value, fill: markColor(row.groupId, index, companyId) }]
-  })
-  if (slices.length === 0) {
-    return <EmptyPlot message="No positive values to graph. Pie slices skip zero and negative numbers." />
-  }
-  return (
-    <ResponsiveContainer width="100%" height="100%">
-      <PieChart>
-        <Pie data={slices} dataKey="value" nameKey="label" stroke="var(--color-bg-surface)" animationDuration={180}>
-          {slices.map((slice) => (
-            <Cell key={slice.key} fill={slice.fill} />
-          ))}
-        </Pie>
-        <Tooltip content={<SeriesTooltip columns={[column]} valueColumn={column} />} />
-        <Legend formatter={(value) => <span className="text-xs text-muted-foreground">{String(value)}</span>} />
-      </PieChart>
-    </ResponsiveContainer>
-  )
 }
 
 function MarginView({ board, companyId }: { board: Board; companyId: string }) {
@@ -587,28 +721,22 @@ function chartTitle(chartType: ChartType): string {
   return "Scatterplot"
 }
 
-function chartDescription(
-  chartType: ChartType,
-  grain: Grain,
-  aggregateRows: boolean,
-  line: string,
-  companyId: string,
-  boardId: string,
-): string {
-  if (chartType === "margins") {
-    return companyId === "all"
-      ? "Year-to-date gross margin and profit margin for each firm."
-      : "Gross margin and profit margin for each quarter."
+function chartDescription(chartType: ChartType, grain: Grain, several: boolean): string {
+  if (chartType === "margins") return "Gross margin and profit margin from the financial results."
+  if (chartType === "pie") {
+    return several
+      ? "Each pie is a table. Choose a metric, and each row with a positive value becomes a slice."
+      : "Choose a table and a metric. Each row with a positive value becomes a slice."
   }
-  if (chartType === "pie" && boardId === "headcount") {
-    return companyId === "all"
-      ? "Improv termination type and length of service, from those tables."
-      : "Termination type and length of service, from those tables."
+  if (chartType === "scatter") {
+    return several ? "Each table has its own scatterplot. Choose both axes." : "Choose a table, then the metrics for both axes."
   }
-  if (chartType === "pie") return "Share of the selected column. Zero and negative values are omitted."
-  if (grain === "company" && aggregateRows) return "Each mark is a firm total. The graph updates when a cell commits."
-  if (grain === "company") return `Each mark is ${line || "the selected line"} by firm. The graph updates when a cell commits.`
-  return "Each mark is a line item. The graph updates when a cell commits."
+  if (grain === "line") {
+    return several ? "Each table has its own bar graph. Checked metrics share one column type." : "Each bar is a row. Check the metrics to plot."
+  }
+  return several
+    ? "Each table has its own bar graph. Firm totals use the checked metrics."
+    : "Each bar is a firm total. Check the metrics to plot."
 }
 
 function seriesColor(column: Column, index: number, companyId: string): string {

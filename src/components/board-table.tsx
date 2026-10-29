@@ -4,17 +4,11 @@ import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react"
 import { aggregateColumn, cellNumber, formatColumnValue, measuredColumn } from "@/data/metrics"
 import { formatCurrency, formatNumber, formatPercent, parseNumber, parsePercentInput } from "@/data/format"
 import { useWorkspace } from "@/data/store"
-import { EXPECTED_COLUMN_ID, LABEL_COLUMN_ID, STATUS_VALUES, type Board, type BoardRow, type Column, type ColumnKind, type StatusValue } from "@/data/types"
+import { RATIO_COLUMNS } from "@/data/ytd-tables"
+import { LABEL_COLUMN_ID, STATUS_VALUES, type Board, type BoardRow, type Column, type ColumnKind, type StatusValue } from "@/data/types"
 import { cn } from "@/lib/cn"
 import { ColumnResizeHandle, resizeCeiling, storedColumnWidth, tablePixelWidth, useColumnWidths, useFrameWidth } from "@/components/column-resize"
 import { Button, Input } from "@/components/ui"
-
-const RATIO_COLUMNS: Column[] = [
-  { id: LABEL_COLUMN_ID, name: "Ratio", kind: "text" },
-  { id: EXPECTED_COLUMN_ID, name: "Target", kind: "percent", decimals: 0 },
-  { id: "q3", name: "Q3", kind: "percent", decimals: 0 },
-  { id: "ytd", name: "YTD", kind: "percent", decimals: 0 },
-]
 
 export function FirmRatioTables({ board, companyId }: { board: Board; companyId: string }) {
   const { dispatch, canEdit } = useWorkspace()
