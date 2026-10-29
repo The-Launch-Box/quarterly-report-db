@@ -3,7 +3,7 @@ export const LABEL_COLUMN_ID = "label"
 /** Plan column. On the YTD board it sits directly beside Q1. */
 export const EXPECTED_COLUMN_ID = "expected"
 
-export const STATUS_VALUES = ["On track", "Watch", "Behind"] as const
+export const STATUS_VALUES = ["Ahead", "On track", "Watch", "Behind"] as const
 
 export type StatusValue = (typeof STATUS_VALUES)[number]
 

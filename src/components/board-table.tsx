@@ -25,7 +25,7 @@ export function BoardTable({
   onDeleteCompany,
   onDeleteColumn,
 }: BoardTableProps) {
-  const { dispatch } = useWorkspace()
+  const { dispatch, canEdit } = useWorkspace()
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set())
   const [flash, setFlash] = useState<{ rowId: string; token: number } | null>(null)
   const flashCount = useRef(0)
@@ -67,9 +67,13 @@ export function BoardTable({
                 <div className={cn("flex items-center gap-1", isNumeric(column.kind) && "justify-end")}>
                   <HeaderLabel
                     column={column}
-                    onRename={(name) => dispatch({ type: "rename-column", boardId: board.id, columnId: column.id, name })}
+                    onRename={
+                      canEdit
+                        ? (name) => dispatch({ type: "rename-column", boardId: board.id, columnId: column.id, name })
+                        : undefined
+                    }
                   />
-                  {column.id === LABEL_COLUMN_ID ? null : (
+                  {canEdit && column.id !== LABEL_COLUMN_ID ? (
                     <Button
                       variant="ghost"
                       size="icon"
@@ -79,15 +83,17 @@ export function BoardTable({
                     >
                       <Trash2 />
                     </Button>
-                  )}
+                  ) : null}
                 </div>
               </th>
             ))}
-            <th scope="col" className="sticky top-0 z-20 w-12 border-b border-border bg-card px-1">
-              <Button variant="ghost" size="icon" aria-label="Add column" onClick={onAddColumn}>
-                <Plus />
-              </Button>
-            </th>
+            {canEdit ? (
+              <th scope="col" className="sticky top-0 z-20 w-12 border-b border-border bg-card px-1">
+                <Button variant="ghost" size="icon" aria-label="Add column" onClick={onAddColumn}>
+                  <Plus />
+                </Button>
+              </th>
+            ) : null}
           </tr>
         </thead>
         <tbody>
@@ -98,6 +104,7 @@ export function BoardTable({
               groupId={group.id}
               groupName={group.name}
               collapsed={collapsed.has(group.id)}
+              canEdit={canEdit}
               canDeleteCompany={canDeleteCompany}
               showSum={board.aggregateRows}
               flash={flash}
@@ -117,7 +124,7 @@ export function BoardTable({
             />
           ))}
           {board.aggregateRows && groups.length > 1 ? (
-            <SummaryRow label="Total" board={board} rows={groups.flatMap((group) => group.rows)} />
+            <SummaryRow label="Total" board={board} rows={groups.flatMap((group) => group.rows)} trailing={canEdit} />
           ) : null}
         </tbody>
       </table>
@@ -130,6 +137,7 @@ function GroupRows({
   groupId,
   groupName,
   collapsed,
+  canEdit,
   canDeleteCompany,
   showSum,
   flash,
@@ -144,6 +152,7 @@ function GroupRows({
   groupId: string
   groupName: string
   collapsed: boolean
+  canEdit: boolean
   canDeleteCompany: boolean
   showSum: boolean
   flash: { rowId: string; token: number } | null
@@ -156,7 +165,7 @@ function GroupRows({
 }) {
   const group = board.groups.find((item) => item.id === groupId)
   if (!group) return null
-  const span = board.columns.length + 1
+  const span = board.columns.length + (canEdit ? 1 : 0)
 
   return (
     <>
@@ -167,15 +176,17 @@ function GroupRows({
               {collapsed ? <ChevronRight /> : <ChevronDown />}
             </Button>
             <span className="swatch size-2.5 shrink-0 rounded-sm" data-brand={groupId} aria-hidden="true" />
-            <CompanyName name={groupName} brandId={groupId} onCommit={onRename} />
+            <CompanyName name={groupName} brandId={groupId} onCommit={canEdit ? onRename : undefined} />
             <span className="text-xs text-muted-foreground">
               {group.rows.length} {group.rows.length === 1 ? "row" : "rows"}
             </span>
-            <Button variant="ghost" size="sm" onClick={onAddRow}>
-              <Plus />
-              Add row
-            </Button>
-            {canDeleteCompany ? (
+            {canEdit ? (
+              <Button variant="ghost" size="sm" onClick={onAddRow}>
+                <Plus />
+                Add row
+              </Button>
+            ) : null}
+            {canEdit && canDeleteCompany ? (
               <Button variant="ghost" size="icon" aria-label={`Delete ${groupName}`} onClick={onDeleteCompany}>
                 <Trash2 />
               </Button>
@@ -207,32 +218,37 @@ function GroupRows({
                         columns={board.columns}
                         row={row}
                         raw={previous}
+                        editable={canEdit}
                         ariaLabel={`${column.name} for ${rowLabel} at ${groupName}`}
                         onCommit={(value) => onCommit(groupId, row.id, column.id, value, previous)}
                       />
                     </td>
                   )
                 })}
-                <td className="border-b border-border-soft bg-card px-1 group-hover:bg-bg-raised">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="opacity-40 group-hover:opacity-100 focus-visible:opacity-100"
-                    aria-label={`Delete ${rowLabel} at ${groupName}`}
-                    onClick={() => onDeleteRow(row.id)}
-                  >
-                    <Trash2 />
-                  </Button>
-                </td>
+                {canEdit ? (
+                  <td className="border-b border-border-soft bg-card px-1 group-hover:bg-bg-raised">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="opacity-40 group-hover:opacity-100 focus-visible:opacity-100"
+                      aria-label={`Delete ${rowLabel} at ${groupName}`}
+                      onClick={() => onDeleteRow(row.id)}
+                    >
+                      <Trash2 />
+                    </Button>
+                  </td>
+                ) : null}
               </tr>
             )
           })}
-      {!collapsed && showSum && group.rows.length > 0 ? <SummaryRow label="Sum" board={board} rows={group.rows} /> : null}
+      {!collapsed && showSum && group.rows.length > 0 ? (
+        <SummaryRow label="Sum" board={board} rows={group.rows} trailing={canEdit} />
+      ) : null}
     </>
   )
 }
 
-function SummaryRow({ label, board, rows }: { label: string; board: Board; rows: BoardRow[] }) {
+function SummaryRow({ label, board, rows, trailing }: { label: string; board: Board; rows: BoardRow[]; trailing: boolean }) {
   return (
     <tr>
       {board.columns.map((column) => (
@@ -251,27 +267,33 @@ function SummaryRow({ label, board, rows }: { label: string; board: Board; rows:
               : ""}
         </td>
       ))}
-      <td className="border-b border-border bg-bg-overlay" />
+      {trailing ? <td className="border-b border-border bg-bg-overlay" /> : null}
     </tr>
   )
 }
 
-function HeaderLabel({ column, onRename }: { column: Column; onRename: (name: string) => void }) {
+function HeaderLabel({ column, onRename }: { column: Column; onRename?: (name: string) => void }) {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(column.name)
   const cancel = useRef(false)
 
   useEffect(() => setDraft(column.name), [column.name])
 
-  if (!editing) {
+  if (!editing || !onRename) {
+    const label = (
+      <span className={cn("truncate px-1", isNumeric(column.kind) && "text-right")}>
+        <span className="uppercase tracking-widest">{column.name}</span>
+        {column.formula ? <span className="ml-2 text-[10px] tracking-widest text-fg-faint">Calc</span> : null}
+      </span>
+    )
+    if (!onRename) return label
     return (
       <button
         type="button"
         className={cn("truncate rounded px-1 text-left normal-case", isNumeric(column.kind) && "text-right")}
         onClick={() => setEditing(true)}
       >
-        <span className="uppercase tracking-widest">{column.name}</span>
-        {column.formula ? <span className="ml-2 text-[10px] tracking-widest text-fg-faint">Calc</span> : null}
+        {label}
       </button>
     )
   }
@@ -305,10 +327,12 @@ function HeaderLabel({ column, onRename }: { column: Column; onRename: (name: st
   )
 }
 
-function CompanyName({ name, brandId, onCommit }: { name: string; brandId: string; onCommit: (name: string) => void }) {
+function CompanyName({ name, brandId, onCommit }: { name: string; brandId: string; onCommit?: (name: string) => void }) {
   const [draft, setDraft] = useState(name)
   const cancel = useRef(false)
   useEffect(() => setDraft(name), [name])
+
+  if (!onCommit) return <span className="px-2 font-medium">{name}</span>
 
   return (
     <Input
@@ -346,6 +370,7 @@ function CellControl({
   columns,
   row,
   raw,
+  editable,
   ariaLabel,
   onCommit,
 }: {
@@ -353,19 +378,53 @@ function CellControl({
   columns: Column[]
   row: BoardRow
   raw: string
+  editable: boolean
   ariaLabel: string
   onCommit: (value: string) => void
 }) {
-  if (column.formula) {
-    return (
-      <span title="Calculated from other columns" className="block px-2 text-right font-mono text-sm text-muted-foreground tabular-nums">
-        {formatColumnValue(column, cellNumber(column, row, columns))}
-      </span>
-    )
+  if (column.formula || !editable) {
+    return <ReadOnlyValue column={column} columns={columns} row={row} raw={raw} calculated={Boolean(column.formula)} />
   }
   if (column.kind === "status") return <StatusCell raw={raw} ariaLabel={ariaLabel} onCommit={onCommit} />
   if (column.kind === "text") return <TextCell raw={raw} ariaLabel={ariaLabel} onCommit={onCommit} />
   return <NumericCell kind={column.kind} raw={raw} ariaLabel={ariaLabel} onCommit={onCommit} />
+}
+
+function ReadOnlyValue({
+  column,
+  columns,
+  row,
+  raw,
+  calculated,
+}: {
+  column: Column
+  columns: Column[]
+  row: BoardRow
+  raw: string
+  calculated: boolean
+}) {
+  if (column.kind === "text" && !calculated) return <span className="block px-2">{raw}</span>
+  if (column.kind === "status") {
+    return <span className={cn("block px-2 text-center text-xs font-semibold", statusClass(raw))}>{raw}</span>
+  }
+  const value = calculated ? cellNumber(column, row, columns) : raw ? Number(raw) : null
+  const shown = value === null || !Number.isFinite(value) ? "" : formatColumnValue(column, value)
+  return (
+    <span
+      title={calculated ? "Calculated from other columns" : undefined}
+      className={cn("block px-2 text-right font-mono text-sm tabular-nums", calculated && "text-muted-foreground")}
+    >
+      {shown}
+    </span>
+  )
+}
+
+function statusClass(raw: string): string {
+  if (raw === "Ahead") return "text-info"
+  if (raw === "On track") return "text-positive"
+  if (raw === "Watch") return "text-warning"
+  if (raw === "Behind") return "text-negative"
+  return "text-fg-faint"
 }
 
 function TextCell({ raw, ariaLabel, onCommit }: { raw: string; ariaLabel: string; onCommit: (value: string) => void }) {
@@ -470,6 +529,7 @@ function StatusCell({ raw, ariaLabel, onCommit }: { raw: string; ariaLabel: stri
       onChange={(event) => onCommit(event.target.value)}
       className={cn(
         "h-8 w-full cursor-pointer rounded-md border border-transparent px-2 text-center text-xs font-semibold outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/40",
+        raw === "Ahead" && "bg-info-dim text-info",
         raw === "On track" && "bg-positive-dim text-positive",
         raw === "Watch" && "bg-warning-dim text-warning",
         raw === "Behind" && "bg-negative-dim text-negative",

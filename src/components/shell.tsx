@@ -1,11 +1,12 @@
 import { NavLink, Outlet } from "react-router"
-import { Target, Users, Wallet, type LucideIcon } from "lucide-react"
+import { Save, Target, Users, Wallet, type LucideIcon } from "lucide-react"
 
+import { useSession } from "@/auth/gate"
 import { portcoId } from "@/data/brands"
 import { listCompanies } from "@/data/metrics"
 import { useWorkspace } from "@/data/store"
 import { cn } from "@/lib/cn"
-import { BrandMark, Select } from "@/components/ui"
+import { BrandMark, Button, Select } from "@/components/ui"
 
 const NAV: { to: string; label: string; icon: LucideIcon }[] = [
   { to: "/ytd", label: "YTD financial results", icon: Wallet },
@@ -14,7 +15,8 @@ const NAV: { to: string; label: string; icon: LucideIcon }[] = [
 ]
 
 export function Shell() {
-  const { workspace, companyId, setCompanyId, savedLabel } = useWorkspace()
+  const session = useSession()
+  const { workspace, companyId, setCompanyId, canEdit, statusLabel, statusTone, saving, save } = useWorkspace()
   const companies = listCompanies(workspace)
   const portco = companyId === "all" ? null : portcoId(companyId)
   const options = [{ value: "all", label: "All companies" }, ...companies.map((company) => ({ value: company.id, label: company.name }))]
@@ -58,13 +60,29 @@ export function Shell() {
         <header className="flex flex-wrap items-center gap-3 border-b border-border bg-card px-4 py-3">
           <p className="text-[11px] uppercase tracking-widest text-muted-foreground">FY2026 · Q4 open</p>
           <Select label="Company" value={companyId} onChange={setCompanyId} options={options} className="w-[220px]" />
-          <p className="ml-auto inline-flex items-center gap-2 text-xs text-muted-foreground">
-            <span
-              className={cn("size-1.5 rounded-full", savedLabel.includes("not saved") ? "bg-warning" : "bg-positive")}
-              aria-hidden="true"
-            />
-            {savedLabel}
-          </p>
+          <div className="ml-auto flex items-center gap-2">
+            <p className="inline-flex items-center gap-2 text-xs text-muted-foreground">
+              <span className={cn("size-1.5 rounded-full", statusTone === "warn" ? "bg-warning" : "bg-positive")} aria-hidden="true" />
+              {statusLabel}
+            </p>
+            <p className="hidden max-w-56 truncate text-xs text-muted-foreground sm:block" title={session.email}>
+              {session.email}
+            </p>
+            <Button variant="ghost" onClick={session.signOut}>
+              Sign out
+            </Button>
+            {canEdit ? (
+              <Button
+                size="icon"
+                aria-label="Save boards"
+                title="Save the boards. This copy is deleted after 24 hours."
+                disabled={saving}
+                onClick={() => void save()}
+              >
+                <Save />
+              </Button>
+            ) : null}
+          </div>
         </header>
         <main id="board-main" className="min-h-0 flex-1 overflow-y-auto p-4 md:p-6">
           <nav className="mb-4 flex flex-wrap gap-2 md:hidden" aria-label="Boards">

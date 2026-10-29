@@ -48,7 +48,7 @@ export function BoardPage() {
 }
 
 function BoardScreen({ boardId }: { boardId: string }) {
-  const { workspace, dispatch, companyId } = useWorkspace()
+  const { workspace, dispatch, companyId, canEdit, resetToSeed } = useWorkspace()
   const board = workspace.boards.find((item) => item.id === boardId)
   const [view, setView] = useState<ViewMode>("split")
   const [columnOpen, setColumnOpen] = useState(false)
@@ -62,7 +62,7 @@ function BoardScreen({ boardId }: { boardId: string }) {
 
   function confirmPending() {
     if (!pending) return
-    if (pending.kind === "reset") dispatch({ type: "reset" })
+    if (pending.kind === "reset") void resetToSeed()
     if (pending.kind === "company") dispatch({ type: "delete-company", groupId: pending.id })
     if (pending.kind === "column") dispatch({ type: "delete-column", boardId, columnId: pending.id })
     setPending(null)
@@ -78,20 +78,22 @@ function BoardScreen({ boardId }: { boardId: string }) {
           <h1 className="mt-1 text-4xl leading-none">{board.title}</h1>
           <p className="mt-2 max-w-2xl text-sm text-muted-foreground">{board.subtitle}</p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <Button onClick={() => setColumnOpen(true)}>
-            <Plus />
-            Add column
-          </Button>
-          <Button variant="outline" onClick={() => setCompanyOpen(true)}>
-            <Plus />
-            Add company
-          </Button>
-          <Button variant="ghost" onClick={() => setPending({ kind: "reset" })}>
-            <RotateCcw />
-            Reset boards
-          </Button>
-        </div>
+        {canEdit ? (
+          <div className="flex flex-wrap items-center gap-2">
+            <Button onClick={() => setColumnOpen(true)}>
+              <Plus />
+              Add column
+            </Button>
+            <Button variant="outline" onClick={() => setCompanyOpen(true)}>
+              <Plus />
+              Add company
+            </Button>
+            <Button variant="ghost" onClick={() => setPending({ kind: "reset" })}>
+              <RotateCcw />
+              Reset boards
+            </Button>
+          </div>
+        ) : null}
       </header>
 
       <section className={cn("grid gap-3 sm:grid-cols-2", kpis.length >= 4 ? "xl:grid-cols-4" : "xl:grid-cols-3")}>
@@ -257,7 +259,7 @@ function pendingTitle(pending: Pending): string {
 }
 
 function pendingDescription(pending: Pending): string {
-  if (pending?.kind === "reset") return "Restores the Q3 close and the Q4 seed figures. Edits saved in this browser are discarded."
+  if (pending?.kind === "reset") return "Restores the starter figures in this view. Save to publish them. The previous save is kept for up to 24 hours."
   if (pending?.kind === "company") return `This removes ${pending.name} from YTD results, headcount, and revenue goals.`
   if (pending?.kind === "column") return `This removes ${pending.name} and its cells from this board.`
   return ""

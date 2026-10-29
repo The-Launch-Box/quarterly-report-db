@@ -252,18 +252,14 @@ function ytdGroup(portco: PortcoSeed): BoardGroup {
   const gross = quarters.map((value) => Math.round(value * portco.gp))
   const ebitda = quarters.map((value) => Math.round(value * portco.ebitda))
   const opex = gross.map((value, index) => value - (ebitda[index] ?? 0))
-  const q3 = quarters[2] ?? 0
-  const q4 = quarters[3] ?? 0
-  const q3Opex = opex[2] ?? 0
-  const q4Opex = opex[3] ?? 0
   return {
     id: portco.id,
     name: portco.name,
     rows: [
-      moneyRow(`${portco.id}-revenue`, "Revenue", quarters, annualPlan(quarters, portco.goalLift), paceStatus(q3, q4)),
-      moneyRow(`${portco.id}-gp`, "Gross profit", gross, annualPlan(gross, portco.goalLift), paceStatus(gross[2] ?? 0, gross[3] ?? 0)),
-      moneyRow(`${portco.id}-opex`, "Operating expenses", opex, annualPlan(opex, 1), costStatus(q3Opex, q4Opex, q3, q4)),
-      moneyRow(`${portco.id}-ebitda`, "EBITDA", ebitda, annualPlan(ebitda, portco.goalLift), paceStatus(ebitda[2] ?? 0, ebitda[3] ?? 0)),
+      moneyRow(`${portco.id}-revenue`, "Revenue", quarters, annualPlan(quarters, portco.goalLift)),
+      moneyRow(`${portco.id}-gp`, "Gross profit", gross, annualPlan(gross, portco.goalLift)),
+      moneyRow(`${portco.id}-opex`, "Operating expenses", opex, annualPlan(opex, 1)),
+      moneyRow(`${portco.id}-ebitda`, "EBITDA", ebitda, annualPlan(ebitda, portco.goalLift)),
     ],
   }
 }
@@ -286,7 +282,7 @@ function headcountGroup(portco: PortcoSeed): BoardGroup {
           q4plan: String(plan),
           q4: String(forecast),
           rate: String(role.rate),
-          status: hiringStatus(plan, forecast),
+          status: varianceStatus(forecast, plan),
         },
       }
     }),
@@ -307,7 +303,6 @@ function revenueGroup(portco: PortcoSeed): BoardGroup {
     rows: MOTIONS.map((motion, index) => {
       const forecast = forecasts[index] ?? 0
       const target = goals[index] ?? 0
-      const attainment = target === 0 ? 0 : forecast / target
       return {
         id: `${portco.id}-${motion.name.toLowerCase().replace(/\s+/g, "-")}`,
         cells: {
@@ -316,14 +311,15 @@ function revenueGroup(portco: PortcoSeed): BoardGroup {
           q3: String(actuals[index] ?? 0),
           goal: String(target),
           q4: String(forecast),
-          status: attainmentStatus(attainment),
+          status: varianceStatus(forecast, target),
         },
       }
     }),
   }
 }
 
-function moneyRow(id: string, label: string, quarters: readonly number[], expected: number, status: StatusValue): BoardRow {
+function moneyRow(id: string, label: string, quarters: readonly number[], expected: number): BoardRow {
+  const ytd = quarters.reduce((sum, value) => sum + value, 0)
   return {
     id,
     cells: {
@@ -333,7 +329,7 @@ function moneyRow(id: string, label: string, quarters: readonly number[], expect
       q2: String(quarters[1] ?? 0),
       q3: String(quarters[2] ?? 0),
       q4: String(quarters[3] ?? 0),
-      status,
+      status: varianceStatus(ytd, expected),
     },
   }
 }
@@ -404,30 +400,20 @@ function allocate(total: number, weights: readonly number[]): number[] {
   return amounts
 }
 
-function paceStatus(previous: number, next: number): StatusValue {
-  if (previous <= 0) return "Watch"
-  const growth = next / previous - 1
-  if (growth >= 0.08) return "On track"
-  if (growth >= 0.02) return "Watch"
-  return "Behind"
-}
-
-function costStatus(q3Cost: number, q4Cost: number, q3Revenue: number, q4Revenue: number): StatusValue {
-  const costGrowth = q3Cost === 0 ? 0 : q4Cost / q3Cost - 1
-  const revenueGrowth = q3Revenue === 0 ? 0 : q4Revenue / q3Revenue - 1
-  if (costGrowth <= revenueGrowth + 0.005) return "On track"
-  if (costGrowth <= revenueGrowth + 0.03) return "Watch"
-  return "Behind"
-}
-
-function hiringStatus(plan: number, forecast: number): StatusValue {
-  if (forecast >= plan) return "On track"
-  if (forecast + 1 >= plan) return "Watch"
-  return "Behind"
-}
-
-function attainmentStatus(attainment: number): StatusValue {
-  if (attainment >= 0.98) return "On track"
-  if (attainment >= 0.92) return "Watch"
-  return "Behind"
+/**
+ * Status from (actual − expected) / expected.
+ * Within 4% is On track. More than 8% below is Behind. More than 8% above is Ahead.
+ * The open band between those cuts is Watch.
+ */
+export function varianceStatus(actual: number, expected: number): StatusValue {
+  if (expected === 0) {
+    if (actual > 0) return "Ahead"
+    if (actual < 0) return "Behind"
+    return "On track"
+  }
+  const variance = (actual - expected) / expected
+  if (Math.abs(variance) <= 0.04 + 1e-9) return "On track"
+  if (variance < -0.08 - 1e-9) return "Behind"
+  if (variance > 0.08 + 1e-9) return "Ahead"
+  return "Watch"
 }

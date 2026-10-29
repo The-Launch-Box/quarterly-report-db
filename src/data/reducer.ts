@@ -1,5 +1,4 @@
 import { listCompanies } from "./metrics"
-import { createSeedWorkspace } from "./seed"
 import { LABEL_COLUMN_ID, type Board, type Column, type ColumnKind, type Workspace } from "./types"
 
 export type WorkspaceAction =
@@ -12,7 +11,7 @@ export type WorkspaceAction =
   | { type: "add-company"; name: string }
   | { type: "rename-company"; groupId: string; name: string }
   | { type: "delete-company"; groupId: string }
-  | { type: "reset" }
+  | { type: "replace"; workspace: Workspace }
 
 export function reducer(workspace: Workspace, action: WorkspaceAction): Workspace {
   switch (action.type) {
@@ -108,8 +107,8 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
         })),
       }
     }
-    case "reset":
-      return createSeedWorkspace()
+    case "replace":
+      return action.workspace
     default: {
       const unreachable: never = action
       void unreachable
