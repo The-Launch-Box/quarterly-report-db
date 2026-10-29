@@ -27,10 +27,12 @@ import {
   defaultPieColumnId,
   defaultScatterColumnIds,
   formatColumnValue,
+  headcountMix,
   plotRows,
   profitMarginChart,
   uniqueLabels,
   valueColumns,
+  type MixSlice,
   type PlotRow,
 } from "@/data/metrics"
 import type { Board, Column, ColumnKind } from "@/data/types"
@@ -81,11 +83,14 @@ export function BoardChart({ board, companyId }: { board: Board; companyId: stri
   const allPlots = plotRows(board, companyId, grain, activeLine)
   const plots = allPlots.slice(0, 40)
   const hidden = allPlots.length - plots.length
+  const headcountPies = chartType === "pie" && board.id === "headcount"
 
   return (
     <section className="rounded-lg border border-border bg-card px-5 py-5" aria-label="Graph">
       <h2 className="text-xl">{chartTitle(chartType)}</h2>
-      <p className="mt-1 text-sm text-muted-foreground">{chartDescription(chartType, grain, board.aggregateRows, activeLine, companyId)}</p>
+      <p className="mt-1 text-sm text-muted-foreground">
+        {chartDescription(chartType, grain, board.aggregateRows, activeLine, companyId, board.id)}
+      </p>
       <div className="mt-4 flex flex-wrap items-end gap-4">
         <Segmented
           label="Graph type"
@@ -98,7 +103,7 @@ export function BoardChart({ board, companyId }: { board: Board; companyId: stri
             ...(marginsAvailable ? [{ value: "margins" as const, label: "Profit margins", icon: LineChartIcon }] : []),
           ]}
         />
-        {chartType === "margins" ? null : (
+        {headcountPies || chartType === "margins" ? null : (
         <Field label="Rows" htmlFor="chart-grain">
           <Select
             id="chart-grain"
@@ -112,7 +117,7 @@ export function BoardChart({ board, companyId }: { board: Board; companyId: stri
           />
         </Field>
         )}
-        {chartType === "margins" ? null : lineRequired || grain === "line" ? (
+        {headcountPies || chartType === "margins" ? null : lineRequired || grain === "line" ? (
           <Field label="Line" htmlFor="chart-line">
             <Select
               id="chart-line"
@@ -126,9 +131,9 @@ export function BoardChart({ board, companyId }: { board: Board; companyId: stri
             />
           </Field>
         ) : null}
-        {chartType === "pie" ? (
+        {headcountPies || chartType !== "pie" ? null : (
           <ColumnSelect id="chart-pie" label="Value" columns={columns} value={activePie} onChange={setPieId} />
-        ) : null}
+        )}
         {chartType === "scatter" ? (
           <>
             <ColumnSelect id="chart-x" label="X axis" columns={columns} value={xId} onChange={(id) => setAxes((current) => ({ ...current, x: id }))} />
@@ -161,9 +166,11 @@ export function BoardChart({ board, companyId }: { board: Board; companyId: stri
           <p className="basis-full text-xs text-muted-foreground">A bar graph uses one column type.</p>
         </div>
       ) : null}
-      <div className="mt-4 h-[340px] w-full min-w-0">
+      <div className={headcountPies ? "mt-4 w-full min-w-0" : "mt-4 h-[340px] w-full min-w-0"}>
         {chartType === "bar" ? (
           <BarView companyId={companyId} plots={plots} columns={columns} barIds={barIds} />
+        ) : headcountPies ? (
+          <HeadcountMixView board={board} companyId={companyId} />
         ) : chartType === "pie" ? (
           <PieView companyId={companyId} plots={plots} column={columns.find((column) => column.id === activePie)} />
         ) : chartType === "margins" ? (
@@ -177,7 +184,7 @@ export function BoardChart({ board, companyId }: { board: Board; companyId: stri
           />
         )}
       </div>
-      {chartType !== "margins" && hidden > 0 ? (
+      {!headcountPies && chartType !== "margins" && hidden > 0 ? (
         <p className="mt-2 text-xs text-muted-foreground">Showing 40 marks. {hidden} more are hidden.</p>
       ) : null}
     </section>
@@ -251,6 +258,83 @@ function BarView({
       </BarChart>
     </ResponsiveContainer>
   )
+}
+
+function HeadcountMixView({ board, companyId }: { board: Board; companyId: string }) {
+  const mix = headcountMix(board, companyId)
+  if (!mix) {
+    return (
+      <div className="flex h-40 items-center justify-center text-center text-sm text-muted-foreground">
+        This firm has no termination or tenure mix.
+      </div>
+    )
+  }
+  return (
+    <div className="grid gap-6 md:grid-cols-2">
+      <MixDonut title="Termination Type" slices={mix.termination} />
+      <MixDonut title="Length of Service" slices={mix.tenure} />
+    </div>
+  )
+}
+
+function MixDonut({ title, slices }: { title: string; slices: MixSlice[] }) {
+  const [first, second] = centerLines(title)
+  if (slices.length === 0) {
+    return <p className="text-sm text-muted-foreground">{title} has no figures yet.</p>
+  }
+  return (
+    <div
+      className="flex flex-wrap items-center gap-4"
+      role="img"
+      aria-label={`${title}: ${slices.map((slice) => `${slice.label} ${slice.value}%`).join(", ")}`}
+    >
+      <div className="relative h-52 w-52 shrink-0">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={slices}
+              dataKey="value"
+              nameKey="label"
+              innerRadius="62%"
+              outerRadius="96%"
+              startAngle={90}
+              endAngle={-270}
+              stroke="var(--color-card)"
+              strokeWidth={2}
+              isAnimationActive={false}
+            >
+              {slices.map((slice) => (
+                <Cell key={slice.id} fill={slice.color} />
+              ))}
+            </Pie>
+          </PieChart>
+        </ResponsiveContainer>
+        <div className="pointer-events-none absolute inset-0 grid place-items-center px-10 text-center text-sm leading-tight font-medium text-foreground">
+          <span>
+            {first}
+            <br />
+            {second}
+          </span>
+        </div>
+      </div>
+      <ul className="space-y-2">
+        {slices.map((slice) => (
+          <li key={slice.id} className="flex items-start gap-2 text-sm text-foreground">
+            <span className="mt-1 size-2.5 shrink-0 rounded-sm" style={{ background: slice.color }} />
+            <span>
+              {slice.label} {slice.value}%
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+function centerLines(title: string): [string, string] {
+  const words = title.split(" ")
+  const last = words.pop() ?? title
+  return [words.join(" ") || title, last]
 }
 
 function PieView({ companyId, plots, column }: { companyId: string; plots: PlotRow[]; column: Column | undefined }) {
@@ -503,11 +587,23 @@ function chartTitle(chartType: ChartType): string {
   return "Scatterplot"
 }
 
-function chartDescription(chartType: ChartType, grain: Grain, aggregateRows: boolean, line: string, companyId: string): string {
+function chartDescription(
+  chartType: ChartType,
+  grain: Grain,
+  aggregateRows: boolean,
+  line: string,
+  companyId: string,
+  boardId: string,
+): string {
   if (chartType === "margins") {
     return companyId === "all"
       ? "Year-to-date gross margin and profit margin for each firm."
       : "Gross margin and profit margin for each quarter."
+  }
+  if (chartType === "pie" && boardId === "headcount") {
+    return companyId === "all"
+      ? "Improv termination type and length of service."
+      : "Termination type and length of service."
   }
   if (chartType === "pie") return "Share of the selected column. Zero and negative values are omitted."
   if (grain === "company" && aggregateRows) return "Each mark is a firm total. The graph updates when a cell commits."

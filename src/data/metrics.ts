@@ -365,6 +365,56 @@ function rowByLabel(group: BoardGroup, label: string): BoardRow | undefined {
   return group.rows.find((row) => labelsMatch(row, label))
 }
 
+/** Deck colors for the Improv headcount mix: green, red, orange, blue. */
+const MIX_COLORS = ["#70ad47", "#e04b4b", "#ed7d31", "#5b9bd5"] as const
+
+const TERMINATION_MIX: readonly { label: string; name: string }[] = [
+  { label: "Involuntary termination %", name: "Involuntary Termination" },
+  { label: "Voluntary unspecified %", name: "Voluntary Unspecified" },
+  { label: "Non-regrettable %", name: "Non-Regrettable" },
+  { label: "Regrettable %", name: "Regrettable" },
+]
+
+const TENURE_MIX: readonly { label: string; name: string }[] = [
+  { label: "Tenure 1-3 years %", name: "1-3 years" },
+  { label: "Tenure 6 months-1 year %", name: "6 months - 1 year" },
+  { label: "Tenure under 6 months %", name: "< 6 months" },
+]
+
+export interface MixSlice {
+  id: string
+  label: string
+  value: number
+  color: string
+}
+
+export interface HeadcountMix {
+  termination: MixSlice[]
+  tenure: MixSlice[]
+}
+
+/** Termination type and length of service for one firm. All firms uses Improv. */
+export function headcountMix(board: Board, companyId: string): HeadcountMix | null {
+  if (board.id !== "headcount") return null
+  const group = board.groups.find((item) => item.id === (companyId === "all" ? "improv" : companyId))
+  if (!group) return null
+  const termination = mixSlices(group, TERMINATION_MIX)
+  const tenure = mixSlices(group, TENURE_MIX)
+  if (termination.length === 0 && tenure.length === 0) return null
+  return { termination, tenure }
+}
+
+function mixSlices(group: BoardGroup, specs: readonly { label: string; name: string }[]): MixSlice[] {
+  return specs.flatMap((spec, index) => {
+    const row = group.rows.find((item) => labelsMatch(item, spec.label))
+    if (!row) return []
+    const raw = row.cells.q3 || row.cells[EXPECTED_COLUMN_ID] || ""
+    const value = Number(raw)
+    if (!Number.isFinite(value) || value <= 0) return []
+    return [{ id: row.id, label: spec.name, value, color: MIX_COLORS[index] ?? MIX_COLORS[0] }]
+  })
+}
+
 function labelsMatch(row: BoardRow, label: string): boolean {
   return (row.cells[LABEL_COLUMN_ID] ?? "").trim().toLowerCase() === label.toLowerCase()
 }

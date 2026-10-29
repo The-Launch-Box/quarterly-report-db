@@ -15,6 +15,7 @@ import {
   defaultBarColumnIds,
   defaultChartGrain,
   defaultPieColumnId,
+  headcountMix,
   defaultScatterColumnIds,
   formatColumnValue,
   listCompanies,
@@ -559,6 +560,39 @@ if (defaultChartGrain(ytd) !== "company" || defaultChartGrain(headcount) !== "co
   throw new Error("headcount and YTD charts should stay on firm totals")
 }
 if (defaultPieColumnId(headcount) !== "q4") throw new Error("headcount pie should plot forecast headcount")
+const improvMix = must(headcountMix(headcount, "improv"), "improv headcount mix")
+if (improvMix.termination.map((slice) => `${slice.label} ${slice.value}`).join(", ") !== "Involuntary Termination 70, Voluntary Unspecified 15, Non-Regrettable 10, Regrettable 5") {
+  throw new Error(`termination mix ${improvMix.termination.map((slice) => slice.label).join(", ")}`)
+}
+if (improvMix.tenure.map((slice) => `${slice.label} ${slice.value}`).join(", ") !== "1-3 years 40, 6 months - 1 year 30, < 6 months 20") {
+  throw new Error(`tenure mix ${improvMix.tenure.map((slice) => `${slice.label} ${slice.value}`).join(", ")}`)
+}
+if (improvMix.termination.map((slice) => slice.color).join() !== "#70ad47,#e04b4b,#ed7d31,#5b9bd5") {
+  throw new Error("termination colors left the deck order")
+}
+const allMix = must(headcountMix(headcount, "all"), "all-firms mix")
+if (allMix.termination[0]?.value !== 70 || allMix.tenure.length !== 3) throw new Error("all firms should use the Improv mix")
+if (headcountMix(headcount, "echelon") !== null) throw new Error("echelon received a termination mix")
+if (headcountMix(must(seed.boards.find((board) => board.id === "ytd"), "ytd for mix"), "improv") !== null) {
+  throw new Error("YTD received a headcount mix")
+}
+const tenureRow = must(
+  headcount.groups.find((group) => group.id === "improv")?.rows.find((row) => row.cells[LABEL_COLUMN_ID] === "Tenure 1-3 years %"),
+  "tenure row",
+)
+const editedTenure = reducer(seed, {
+  type: "set-cell",
+  boardId: "headcount",
+  groupId: "improv",
+  rowId: tenureRow.id,
+  columnId: "q3",
+  value: "55",
+})
+const editedMix = must(
+  headcountMix(must(editedTenure.boards.find((board) => board.id === "headcount"), "edited headcount"), "improv"),
+  "edited mix",
+)
+if (editedMix.tenure[0]?.value !== 55) throw new Error("length of service did not follow the cell")
 if (defaultScatterColumnIds(headcount).join() !== "q3,q4") throw new Error("headcount scatter should plot headcount, not pay")
 const headcountPlot = must(
   plotRows(headcount, "echelon", "company", "").find((row) => row.groupId === "echelon"),
