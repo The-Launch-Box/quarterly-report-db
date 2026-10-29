@@ -1,4 +1,5 @@
 import { formatCompactCurrency, formatCurrency, formatNumber, formatPercent } from "./format"
+import { HEADCOUNT_TERMINATION_TABLE_ID, HEADCOUNT_TENURE_TABLE_ID } from "./seed"
 import { EXPECTED_COLUMN_ID, LABEL_COLUMN_ID, type Board, type BoardGroup, type BoardRow, type Column, type Workspace } from "./types"
 
 export interface KpiResult {
@@ -380,25 +381,24 @@ export interface HeadcountMix {
   tenure: MixSlice[]
 }
 
-/** Termination type and length of service from the headcount table. All firms uses Improv. */
+/** Termination type and length of service from those headcount tables. All firms uses Improv. */
 export function headcountMix(board: Board, companyId: string): HeadcountMix | null {
   if (board.id !== "headcount") return null
   const group = board.groups.find((item) => item.id === (companyId === "all" ? "improv" : companyId))
   if (!group) return null
-  const termination = mixSlices(group, "termination")
-  const tenure = mixSlices(group, "tenure")
+  const termination = mixSlices(group, HEADCOUNT_TERMINATION_TABLE_ID)
+  const tenure = mixSlices(group, HEADCOUNT_TENURE_TABLE_ID)
   if (termination.length === 0 && tenure.length === 0) return null
   return { termination, tenure }
 }
 
-function mixSlices(group: BoardGroup, mix: "termination" | "tenure"): MixSlice[] {
+function mixSlices(group: BoardGroup, tableId: string): MixSlice[] {
   let index = 0
-  return group.rows.flatMap((row) => {
-    if (row.mix !== mix) return []
-    const raw = row.cells.q3 || row.cells[EXPECTED_COLUMN_ID] || ""
+  return (group.customRows?.[tableId] ?? []).flatMap((row) => {
+    const raw = row.cells.share || row.cells.q3 || ""
     const stored = Number(raw)
     if (!Number.isFinite(stored) || stored <= 0) return []
-    const value = row.measure === "percent" ? Math.round(stored * 100) : stored
+    const value = stored <= 1 ? Math.round(stored * 100) : Math.round(stored)
     const color = MIX_COLORS[index] ?? MIX_COLORS[0]
     index += 1
     const label = (row.cells[LABEL_COLUMN_ID] ?? "").trim() || "Untitled"

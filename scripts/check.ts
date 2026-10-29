@@ -26,7 +26,7 @@ import {
 import { parseWorkspace } from "../src/data/persist"
 import { keepFirmBoards, reducer } from "../src/data/reducer"
 import { commitHtml, editorHtml, sanitizeRichText } from "../src/data/rich-text"
-import { createSeedWorkspace, IMPROV_OPERATING_RESULTS, seedProblems, varianceStatus, withExpectedColumn, withFirmRatios, withHeadcountMix, withImprovDeck, withSeedKpis, withoutRetiredStatuses, withoutYtdSubtitle } from "../src/data/seed"
+import { createSeedWorkspace, HEADCOUNT_MONTH_TABLE_ID, HEADCOUNT_TERMINATION_TABLE_ID, HEADCOUNT_TENURE_TABLE_ID, IMPROV_OPERATING_RESULTS, seedProblems, varianceStatus, withExpectedColumn, withFirmRatios, withHeadcountTables, withImprovDeck, withSeedKpis, withoutRetiredStatuses, withoutYtdSubtitle } from "../src/data/seed"
 import { EXPECTED_COLUMN_ID, LABEL_COLUMN_ID, MAX_COLUMN_WIDTH, type Board, type Column, type Workspace } from "../src/data/types"
 import { RATIOS_TABLE_ID, STATEMENT_TABLE_ID, ytdSectionOrder } from "../src/data/ytd-tables"
 
@@ -573,29 +573,39 @@ if (improvMix.termination.map((slice) => slice.color).join() !== "#70ad47,#e04b4
 const allMix = must(headcountMix(headcount, "all"), "all-firms mix")
 if (allMix.termination[0]?.value !== 70 || allMix.tenure.length !== 3) throw new Error("all firms should use the Improv mix")
 if (headcountMix(headcount, "echelon") !== null) throw new Error("blank echelon mix rows drew a pie")
+const improvHeadcount = must(headcount.groups.find((group) => group.id === "improv"), "improv headcount group")
+if (improvHeadcount.rows.map((row) => row.cells[LABEL_COLUMN_ID]).join("|") !== "2025 headcount|2024 headcount|2023 headcount|Total turnover (61%)") {
+  throw new Error("the headcount table should keep census and turnover")
+}
+if (headcount.ytdCustomTables?.map((table) => table.title).join("|") !== "Month by Month|Termination type|Length of service") {
+  throw new Error("headcount is missing its month, termination, and tenure tables")
+}
+const improvMonths = improvHeadcount.customRows?.[HEADCOUNT_MONTH_TABLE_ID] ?? []
+if (improvMonths[0]?.cells[LABEL_COLUMN_ID] !== "Aug 2025" || improvMonths[0]?.cells.count !== "30") {
+  throw new Error("month by month should start at Aug 2025")
+}
+if (improvMonths.at(-1)?.cells[LABEL_COLUMN_ID] !== "Aug 2026" || improvMonths.at(-1)?.cells.count !== "32") {
+  throw new Error("month by month should end at Aug 2026")
+}
 const echelonTerm = must(
-  headcount.groups.find((group) => group.id === "echelon")?.rows.find((row) => row.cells[LABEL_COLUMN_ID] === "Involuntary Termination"),
+  headcount.groups.find((group) => group.id === "echelon")?.customRows?.[HEADCOUNT_TERMINATION_TABLE_ID]?.find((row) => row.cells[LABEL_COLUMN_ID] === "Involuntary Termination"),
   "echelon termination row",
 )
-if (echelonTerm.mix !== "termination" || echelonTerm.measure !== "percent" || echelonTerm.cells.q3) {
-  throw new Error("echelon is missing a blank termination row")
-}
+if (echelonTerm.cells.share) throw new Error("echelon is missing a blank termination row")
 if (headcountMix(must(seed.boards.find((board) => board.id === "ytd"), "ytd for mix"), "improv") !== null) {
   throw new Error("YTD received a headcount mix")
 }
 const tenureRow = must(
-  headcount.groups.find((group) => group.id === "improv")?.rows.find((row) => row.cells[LABEL_COLUMN_ID] === "1-3 years"),
+  improvHeadcount.customRows?.[HEADCOUNT_TENURE_TABLE_ID]?.find((row) => row.cells[LABEL_COLUMN_ID] === "1-3 years"),
   "tenure row",
 )
-if (tenureRow.mix !== "tenure" || tenureRow.measure !== "percent" || tenureRow.cells.q3 !== "0.4") {
-  throw new Error("length of service is not a percent row in the table")
-}
+if (tenureRow.cells.share !== "0.4") throw new Error("length of service is not in its table")
 const editedTenure = reducer(seed, {
   type: "set-cell",
   boardId: "headcount",
   groupId: "improv",
   rowId: tenureRow.id,
-  columnId: "q3",
+  columnId: "share",
   value: "0.55",
 })
 const editedMix = must(
@@ -606,7 +616,7 @@ if (editedMix.tenure[0]?.value !== 55 || editedMix.tenure[0]?.label !== "1-3 yea
   throw new Error("length of service did not follow the table")
 }
 const termRow = must(
-  headcount.groups.find((group) => group.id === "improv")?.rows.find((row) => row.mix === "termination"),
+  improvHeadcount.customRows?.[HEADCOUNT_TERMINATION_TABLE_ID]?.find((row) => row.cells[LABEL_COLUMN_ID] === "Involuntary Termination"),
   "termination row",
 )
 const renamedMix = reducer(seed, {
@@ -623,47 +633,54 @@ const renamedSlice = headcountMix(
 )?.termination[0]
 if (renamedSlice?.label !== "Let go") throw new Error("the pie did not use the table label")
 const staleMix = structuredClone(seed)
-const staleMixImprov = must(
-  staleMix.boards.find((board) => board.id === "headcount")?.groups.find((group) => group.id === "improv"),
-  "stale mix improv",
+const staleBoard = must(staleMix.boards.find((board) => board.id === "headcount"), "stale headcount board")
+delete staleBoard.headcountTables
+delete staleBoard.ytdCustomTables
+delete staleBoard.ytdTableOrder
+const staleMixImprov = must(staleBoard.groups.find((group) => group.id === "improv"), "stale mix improv")
+const staleMonths = staleMixImprov.customRows?.[HEADCOUNT_MONTH_TABLE_ID] ?? []
+const staleAug = must(staleMonths.find((row) => row.cells[LABEL_COLUMN_ID] === "Aug 2025"), "stale aug")
+staleMixImprov.rows.push({
+  id: staleAug.id,
+  cells: { [LABEL_COLUMN_ID]: "Aug 2025", [EXPECTED_COLUMN_ID]: "30", q3: "30" },
+})
+staleMixImprov.rows.push({
+  id: "stale-term",
+  cells: { [LABEL_COLUMN_ID]: "Involuntary termination %", [EXPECTED_COLUMN_ID]: "70", q3: "70" },
+})
+staleMixImprov.rows.push({
+  id: "improv-total-employees",
+  cells: { [LABEL_COLUMN_ID]: "Total employees", q3: "32" },
+})
+delete staleMixImprov.customRows
+for (const group of staleBoard.groups) delete group.customRows
+const migratedMix = withHeadcountTables(staleMix)
+const migratedImprov = must(
+  migratedMix.boards.find((board) => board.id === "headcount")?.groups.find((group) => group.id === "improv"),
+  "migrated improv",
 )
-const staleTerm = must(
-  staleMixImprov.rows.find((row) => row.cells[LABEL_COLUMN_ID] === "Involuntary Termination"),
-  "stale termination",
-)
-staleTerm.cells[LABEL_COLUMN_ID] = "Involuntary termination %"
-staleTerm.cells.q3 = "70"
-staleTerm.cells[EXPECTED_COLUMN_ID] = "70"
-delete staleTerm.mix
-delete staleTerm.measure
-const staleEchelon = must(
-  staleMix.boards.find((board) => board.id === "headcount")?.groups.find((group) => group.id === "echelon"),
-  "stale echelon",
-)
-staleEchelon.rows = staleEchelon.rows.filter((row) => !row.mix)
-const migratedMix = withHeadcountMix(staleMix)
+if (migratedImprov.rows.some((row) => row.cells[LABEL_COLUMN_ID] === "Involuntary Termination" || row.cells[LABEL_COLUMN_ID] === "Aug 2025" || row.cells[LABEL_COLUMN_ID] === "Total employees")) {
+  throw new Error("census table still holds months, termination, or total employees")
+}
 const migratedTerm = must(
-  migratedMix.boards
-    .find((board) => board.id === "headcount")
-    ?.groups.find((group) => group.id === "improv")
-    ?.rows.find((row) => row.cells[LABEL_COLUMN_ID] === "Involuntary Termination"),
+  migratedImprov.customRows?.[HEADCOUNT_TERMINATION_TABLE_ID]?.find((row) => row.cells[LABEL_COLUMN_ID] === "Involuntary Termination"),
   "migrated termination",
 )
-if (migratedTerm.mix !== "termination" || migratedTerm.measure !== "percent" || migratedTerm.cells.q3 !== "0.7") {
-  throw new Error("an old termination percent was not moved into the table")
-}
+if (migratedTerm.cells.share !== "0.7") throw new Error("an old termination percent was not moved into its table")
+const migratedAug = migratedImprov.customRows?.[HEADCOUNT_MONTH_TABLE_ID]?.find((row) => row.cells[LABEL_COLUMN_ID] === "Aug 2025")
+if (migratedAug?.cells.count !== "30") throw new Error("Aug 2025 was not moved into Month by Month")
 const migratedEchelon = migratedMix.boards
   .find((board) => board.id === "headcount")
   ?.groups.find((group) => group.id === "echelon")
-  ?.rows.find((row) => row.cells[LABEL_COLUMN_ID] === "Involuntary Termination")
-if (!migratedEchelon || migratedEchelon.cells.q3) throw new Error("a firm without a mix did not gain blank rows")
-if (withHeadcountMix(migratedMix) !== migratedMix) throw new Error("headcount mix migration ran twice")
-if (withHeadcountMix(seed) !== seed) throw new Error("current headcount mix was rewritten")
+  ?.customRows?.[HEADCOUNT_TERMINATION_TABLE_ID]?.find((row) => row.cells[LABEL_COLUMN_ID] === "Involuntary Termination")
+if (!migratedEchelon || migratedEchelon.cells.share) throw new Error("a firm without a mix did not gain a blank termination table")
+if (withHeadcountTables(migratedMix) !== migratedMix) throw new Error("headcount table migration ran twice")
+if (withHeadcountTables(seed) !== seed) throw new Error("current headcount tables were rewritten")
 const addedMixFirm = reducer(seed, { type: "add-company", name: "Northwind Mix" })
 const addedMixRow = addedMixFirm.boards
   .find((board) => board.id === "headcount")
   ?.groups.find((group) => group.name === "Northwind Mix")
-  ?.rows.find((row) => row.mix === "tenure" && row.cells[LABEL_COLUMN_ID] === "1-3 years")
+  ?.customRows?.[HEADCOUNT_TENURE_TABLE_ID]?.find((row) => row.cells[LABEL_COLUMN_ID] === "1-3 years")
 if (!addedMixRow) throw new Error("a new firm did not get length of service rows")
 if (defaultScatterColumnIds(headcount).join() !== "q3,q4") throw new Error("headcount scatter should plot headcount, not pay")
 const headcountPlot = must(
@@ -800,8 +817,12 @@ if (ytdSectionOrder(ytdBoard).join(",") !== `${STATEMENT_TABLE_ID},${RATIOS_TABL
 }
 const headcountTable = reducer(seed, { type: "add-ytd-table", boardId: "headcount", tableId: "extra", columnId: "notes", title: "Notes" })
 const headcountWithTable = must(headcountTable.boards.find((board) => board.id === "headcount"), "headcount with a table")
-if (headcountWithTable.ytdCustomTables?.[0]?.title !== "Notes") throw new Error("headcount did not add a table")
-if (ytdSectionOrder(headcountWithTable).join(",") !== "extra") throw new Error("headcount table order included YTD sections")
+if (!headcountWithTable.ytdCustomTables?.some((table) => table.id === "extra" && table.title === "Notes")) {
+  throw new Error("headcount did not add a table")
+}
+if (ytdSectionOrder(headcountWithTable).join(",") !== `${HEADCOUNT_MONTH_TABLE_ID},${HEADCOUNT_TERMINATION_TABLE_ID},${HEADCOUNT_TENURE_TABLE_ID},extra`) {
+  throw new Error("headcount table order included YTD sections")
+}
 if (!headcountWithTable.groups.every((group) => group.customRows?.extra?.length === 3)) {
   throw new Error("headcount table did not start with three rows for each firm")
 }
@@ -876,7 +897,7 @@ const firmRows = firmAfterTable.boards
   .find((board) => board.id === "ytd")
   ?.groups.find((group) => group.name === "Northwind Pipeline")?.customRows?.pipeline
 if (firmRows?.length !== 3) throw new Error("a new firm did not get the extra table")
-if (firmAfterTable.boards.find((board) => board.id === "headcount")?.groups.find((group) => group.name === "Northwind Pipeline")?.customRows) {
+if (firmAfterTable.boards.find((board) => board.id === "headcount")?.groups.find((group) => group.name === "Northwind Pipeline")?.customRows?.pipeline) {
   throw new Error("headcount received an extra YTD table")
 }
 const droppedYtdTable = reducer(filledPipeline, { type: "delete-ytd-table", boardId: "ytd", tableId: "pipeline" })
@@ -905,12 +926,12 @@ droppedImprov.ratios = droppedImprov.ratios?.filter((row) => row.id !== "improv-
 if (withFirmRatios(droppedRatios) !== droppedRatios) throw new Error("a deleted ratio row was put back")
 
 const improvHeads = computeKpis(headcount, "improv").find((kpi) => kpi.id === "q3-heads")
-if (!improvHeads || improvHeads.value !== "32") throw new Error(`improv headcount ${improvHeads?.value ?? "missing"}`)
+if (!improvHeads || improvHeads.value !== "n/a") throw new Error(`improv headcount ${improvHeads?.value ?? "missing"}`)
 const aug = must(
-  headcount.groups.find((group) => group.id === "improv")?.rows.find((row) => row.cells[LABEL_COLUMN_ID] === "Aug 2025"),
+  headcount.groups.find((group) => group.id === "improv")?.customRows?.[HEADCOUNT_MONTH_TABLE_ID]?.find((row) => row.cells[LABEL_COLUMN_ID] === "Aug 2025"),
   "aug 2025",
 )
-if (aug.cells.q3 !== "30" || !aug.omitFromRollup) throw new Error("aug 2025 should stay out of the headcount total")
+if (aug.cells.count !== "30") throw new Error("aug 2025 should stay in Month by Month")
 
 const improvPlan = must(
   seed.boards.find((board) => board.id === "revenue")?.groups.find((group) => group.id === "improv"),
@@ -945,11 +966,16 @@ const corruptGroup = corruptRatios.boards[0]?.groups[0]
 if (!corruptGroup) throw new Error("corrupt fixture")
 corruptGroup.metrics = { gpm: 0.38 }
 if (parseWorkspace(corruptRatios) !== null) throw new Error("numeric firm ratio accepted")
-const roundAug = roundTrip.boards
-  .find((board) => board.id === "headcount")
-  ?.groups.find((group) => group.id === "improv")
-  ?.rows.find((row) => row.cells[LABEL_COLUMN_ID] === "Aug 2025")
-if (!roundAug?.omitFromRollup) throw new Error("rollup flag dropped on save")
+const roundHeadcount = must(roundTrip.boards.find((board) => board.id === "headcount"), "round trip headcount")
+if (!roundHeadcount.headcountTables) throw new Error("headcount table flag dropped on save")
+const roundAug = roundHeadcount.groups
+  .find((group) => group.id === "improv")
+  ?.customRows?.[HEADCOUNT_MONTH_TABLE_ID]?.find((row) => row.cells[LABEL_COLUMN_ID] === "Aug 2025")
+if (roundAug?.cells.count !== "30") throw new Error("month by month dropped on save")
+const roundShare = roundHeadcount.groups
+  .find((group) => group.id === "improv")
+  ?.customRows?.[HEADCOUNT_TENURE_TABLE_ID]?.find((row) => row.cells[LABEL_COLUMN_ID] === "1-3 years")
+if (roundShare?.cells.share !== "0.4") throw new Error("length of service dropped on save")
 
 const editedNote = reducer(seed, { type: "set-operating-results", groupId: "improv", value: "Backlog moved." })
 const savedNote = editedNote.boards.find((board) => board.id === "ytd")?.groups.find((group) => group.id === "improv")?.operatingResults

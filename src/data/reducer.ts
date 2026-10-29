@@ -1,5 +1,5 @@
 import { isValueColumn, listCompanies } from "./metrics"
-import { firmRatioRows, headcountMixRows } from "./seed"
+import { firmRatioRows, headcountTemplateRows } from "./seed"
 import {
   LABEL_COLUMN_ID,
   MAX_COLUMN_WIDTH,
@@ -467,7 +467,7 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
         ...workspace,
         boards: workspace.boards.map((board) => {
           if (board.firmId) return board
-          const customRows = starterCustomRows(board)
+          const customRows = starterCustomRows(board, groupId)
           return {
             ...board,
             groups: [
@@ -475,10 +475,7 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
               {
                 id: groupId,
                 name,
-                rows: [
-                  { id: crypto.randomUUID(), cells: { [LABEL_COLUMN_ID]: "New line" } },
-                  ...(board.id === "headcount" ? headcountMixRows(groupId) : []),
-                ],
+                rows: [{ id: crypto.randomUUID(), cells: { [LABEL_COLUMN_ID]: "New line" } }],
                 ...(board.id === "ytd" ? { ratios: firmRatioRows(groupId) } : {}),
                 ...(customRows ? { customRows } : {}),
               },
@@ -816,10 +813,12 @@ function withoutCustomTable(group: BoardGroup, tableId: string): BoardGroup {
   return next
 }
 
-function starterCustomRows(board: Board): Record<string, BoardRow[]> | undefined {
+function starterCustomRows(board: Board, groupId: string): Record<string, BoardRow[]> | undefined {
   if (!board.ytdCustomTables?.length) return undefined
   const customRows: Record<string, BoardRow[]> = {}
-  for (const table of board.ytdCustomTables) customRows[table.id] = [blankItem(), blankItem(), blankItem()]
+  for (const table of board.ytdCustomTables) {
+    customRows[table.id] = headcountTemplateRows(table.id, groupId) ?? [blankItem(), blankItem(), blankItem()]
+  }
   return customRows
 }
 

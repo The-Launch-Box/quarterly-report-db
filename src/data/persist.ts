@@ -95,6 +95,7 @@ function readBoard(value: unknown): Board | null {
     ...(ytdTableOrder ? { ytdTableOrder } : {}),
     ...(textEntries ? { textEntries } : {}),
     ...(value.kpisHidden === true ? { kpisHidden: true as const } : {}),
+    ...(value.headcountTables === true ? { headcountTables: true as const } : {}),
   }
 }
 

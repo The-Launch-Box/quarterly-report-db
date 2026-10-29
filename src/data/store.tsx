@@ -4,7 +4,7 @@ import { useSession } from "@/auth/gate"
 import { listCompanies } from "./metrics"
 import { fetchBoard, fetchSeed, putBoard, type BoardPayload } from "./remote"
 import { keepFirmBoards, reducer, type WorkspaceAction } from "./reducer"
-import { withFirmRatios, withHeadcountMix, withImprovDeck, withSeedKpis, withoutRetiredStatuses, withoutYtdSubtitle } from "./seed"
+import { withFirmRatios, withHeadcountTables, withImprovDeck, withSeedKpis, withoutRetiredStatuses, withoutYtdSubtitle } from "./seed"
 import type { Workspace } from "./types"
 
 const COMPANY_KEY = "karla-q3-company"
@@ -65,7 +65,7 @@ export function WorkspaceProvider({ children }: { children: ReactNode }) {
         applyPayload({
           ...payload,
           workspace: withSeedKpis(
-            withoutRetiredStatuses(withoutYtdSubtitle(withHeadcountMix(withFirmRatios(withImprovDeck(payload.workspace))))),
+            withoutRetiredStatuses(withoutYtdSubtitle(withHeadcountTables(withFirmRatios(withImprovDeck(payload.workspace))))),
           ),
         })
         setReady(true)

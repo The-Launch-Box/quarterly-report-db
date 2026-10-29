@@ -141,6 +141,12 @@ export interface Board {
   ytdTableOrder?: string[]
   /** Formatted notes added on this board. Each firm keeps its own text. */
   textEntries?: TextEntry[]
+  /**
+   * Headcount keeps census and turnover on the main table.
+   * Months, termination type, and length of service have their own tables.
+   * Set once those tables exist, so a deleted one is not put back on load.
+   */
+  headcountTables?: boolean
 }
 
 export interface Workspace {

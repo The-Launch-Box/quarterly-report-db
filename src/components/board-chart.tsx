@@ -602,8 +602,8 @@ function chartDescription(
   }
   if (chartType === "pie" && boardId === "headcount") {
     return companyId === "all"
-      ? "Improv termination type and length of service, from those rows in the table."
-      : "Termination type and length of service, from those rows in the table."
+      ? "Improv termination type and length of service, from those tables."
+      : "Termination type and length of service, from those tables."
   }
   if (chartType === "pie") return "Share of the selected column. Zero and negative values are omitted."
   if (grain === "company" && aggregateRows) return "Each mark is a firm total. The graph updates when a cell commits."

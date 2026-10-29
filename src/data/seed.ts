@@ -8,6 +8,7 @@ import {
   type ColumnKind,
   type StatusValue,
   type Workspace,
+  type YtdCustomTable,
 } from "./types"
 
 const ROLES = [
@@ -392,7 +393,10 @@ export function createSeedWorkspace(): Workspace {
         title: "Headcount",
         subtitle: "Expected is the Q4 hiring plan, beside Q3 close. Fully loaded is forecast times annual rate.",
         aggregateRows: true,
+        headcountTables: true,
         columns: HEADCOUNT_COLUMNS,
+        ytdCustomTables: HEADCOUNT_TABLES.map((table) => ({ ...table, columns: table.columns.map((column) => ({ ...column })) })),
+        ytdTableOrder: HEADCOUNT_TABLES.map((table) => table.id),
         groups: PORTCOS.map((portco) => (portco.id === "improv" ? improvHeadcountGroup() : headcountGroup(portco))),
         kpis: [
           { id: "q3-heads", label: "Q3 close", columnId: "q3" },
@@ -492,6 +496,39 @@ const IMPROV_CENSUS: readonly (readonly [string, number])[] = [
   ["2023 headcount", 5],
 ]
 
+export const HEADCOUNT_MONTH_TABLE_ID = "headcount-months"
+export const HEADCOUNT_TERMINATION_TABLE_ID = "headcount-termination"
+export const HEADCOUNT_TENURE_TABLE_ID = "headcount-tenure"
+const HEADCOUNT_COUNT_COLUMN_ID = "count"
+const HEADCOUNT_SHARE_COLUMN_ID = "share"
+
+const HEADCOUNT_TABLES: readonly YtdCustomTable[] = [
+  {
+    id: HEADCOUNT_MONTH_TABLE_ID,
+    title: "Month by Month",
+    columns: [
+      { id: LABEL_COLUMN_ID, name: "Month", kind: "text" },
+      { id: HEADCOUNT_COUNT_COLUMN_ID, name: "Headcount", kind: "number" },
+    ],
+  },
+  {
+    id: HEADCOUNT_TERMINATION_TABLE_ID,
+    title: "Termination type",
+    columns: [
+      { id: LABEL_COLUMN_ID, name: "Type", kind: "text" },
+      { id: HEADCOUNT_SHARE_COLUMN_ID, name: "Share", kind: "percent", decimals: 0 },
+    ],
+  },
+  {
+    id: HEADCOUNT_TENURE_TABLE_ID,
+    title: "Length of service",
+    columns: [
+      { id: LABEL_COLUMN_ID, name: "Length", kind: "text" },
+      { id: HEADCOUNT_SHARE_COLUMN_ID, name: "Share", kind: "percent", decimals: 0 },
+    ],
+  },
+]
+
 const HEADCOUNT_MIX: readonly { mix: "termination" | "tenure"; name: string; legacy: string }[] = [
   { mix: "termination", name: "Involuntary Termination", legacy: "Involuntary termination %" },
   { mix: "termination", name: "Voluntary Unspecified", legacy: "Voluntary unspecified %" },
@@ -559,13 +596,18 @@ function improvHeadcountGroup(): BoardGroup {
     id: "improv",
     name: "Improv",
     rows: [
-      headcountFact("improv-total-employees", "Total employees", 32, true),
-      ...IMPROV_HEADCOUNT.map(([label, count]) => headcountFact(`improv-${slug(label)}`, label, count, false)),
       ...IMPROV_CENSUS.map(([label, count]) => headcountFact(`improv-census-${slug(label)}`, label, count, false)),
       headcountFact("improv-turnover", "Total turnover (61%)", 20, false),
-      ...IMPROV_TERMINATIONS.map(([label, percent]) => mixStat(`improv-${slug(label)}`, label, "termination", percent)),
-      ...IMPROV_TENURE.map(([label, percent]) => mixStat(`improv-${slug(label)}`, label, "tenure", percent)),
     ],
+    customRows: improvHeadcountCustomRows(),
+  }
+}
+
+function improvHeadcountCustomRows(): Record<string, BoardRow[]> {
+  return {
+    [HEADCOUNT_MONTH_TABLE_ID]: IMPROV_HEADCOUNT.map(([label, count]) => countRow(`improv-${slug(label)}`, label, count)),
+    [HEADCOUNT_TERMINATION_TABLE_ID]: IMPROV_TERMINATIONS.map(([label, percent]) => shareRow(`improv-${slug(label)}`, label, percent)),
+    [HEADCOUNT_TENURE_TABLE_ID]: IMPROV_TENURE.map(([label, percent]) => shareRow(`improv-${slug(label)}`, label, percent)),
   }
 }
 
@@ -664,9 +706,18 @@ function closedMoneyRow(id: string, label: string, quarters: readonly [number, n
   }
 }
 
-/** Blank termination and tenure rows for a firm's headcount table. The pies read these rows. */
-export function headcountMixRows(groupId: string): BoardRow[] {
-  return HEADCOUNT_MIX.map((line) => mixStat(`${groupId}-${slug(line.name)}`, line.name, line.mix, null))
+/** Blank rows for one of the headcount tables. Other added tables return null. */
+export function headcountTemplateRows(tableId: string, groupId: string): BoardRow[] | null {
+  if (tableId === HEADCOUNT_MONTH_TABLE_ID) {
+    return IMPROV_HEADCOUNT.map(([label]) => countRow(`${groupId}-${slug(label)}`, label, null))
+  }
+  if (tableId === HEADCOUNT_TERMINATION_TABLE_ID) {
+    return IMPROV_TERMINATIONS.map(([label]) => shareRow(`${groupId}-${slug(label)}`, label, null))
+  }
+  if (tableId === HEADCOUNT_TENURE_TABLE_ID) {
+    return IMPROV_TENURE.map(([label]) => shareRow(`${groupId}-${slug(label)}`, label, null))
+  }
+  return null
 }
 
 /** Puts the starter summary tiles back on a shared board that was saved without them. */
@@ -683,69 +734,137 @@ export function withSeedKpis(workspace: Workspace): Workspace {
   return changed ? { ...workspace, boards } : workspace
 }
 
-/** Turns older percent rows, stored as 70, into the table rows the pies read. */
-export function withHeadcountMix(workspace: Workspace): Workspace {
-  let changed = false
-  const boards = workspace.boards.map((board) => {
-    if (board.id !== "headcount") return board
-    let boardChanged = false
-    const groups = board.groups.map((group) => {
-      const next = ensureMixRows(group)
-      if (next === group) return group
-      boardChanged = true
-      return next
-    })
-    if (!boardChanged) return board
-    changed = true
-    return { ...board, groups }
-  })
-  return changed ? { ...workspace, boards } : workspace
-}
-
-function ensureMixRows(group: BoardGroup): BoardGroup {
-  let changed = false
-  const rows = group.rows.map((row) => {
-    const legacy = HEADCOUNT_MIX.find((line) => row.cells[LABEL_COLUMN_ID] === line.legacy)
-    if (!legacy) return row
-    changed = true
-    return convertMixRow(row, legacy)
-  })
-  const hasMix = rows.some((row) => row.mix === "termination" || row.mix === "tenure")
-  if (!hasMix) return { ...group, rows: [...rows, ...headcountMixRows(group.id)] }
-  if (!changed) return group
-  return { ...group, rows }
-}
-
-function convertMixRow(row: BoardRow, line: (typeof HEADCOUNT_MIX)[number]): BoardRow {
+/**
+ * Moves month, termination, and tenure rows off the main headcount table.
+ * A board that already has these tables is left alone, so a deleted table stays deleted.
+ */
+export function withHeadcountTables(workspace: Workspace): Workspace {
+  const board = workspace.boards.find((item) => item.id === "headcount")
+  if (!board || board.headcountTables === true) return workspace
+  const groups = board.groups.map(splitHeadcountGroup)
+  const withTables = ensureHeadcountTables(board)
   return {
-    ...row,
-    mix: line.mix,
-    measure: "percent",
-    omitFromRollup: true,
-    cells: {
-      ...row.cells,
-      [LABEL_COLUMN_ID]: line.name,
-      ...ratioCell(row.cells.q3, "q3"),
-      ...ratioCell(row.cells[EXPECTED_COLUMN_ID], EXPECTED_COLUMN_ID),
+    ...workspace,
+    boards: workspace.boards.map((item) =>
+      item.id === "headcount"
+        ? {
+            ...withTables,
+            headcountTables: true,
+            groups: groups.every((group, index) => group === board.groups[index]) ? board.groups : groups,
+          }
+        : item,
+    ),
+  }
+}
+
+function ensureHeadcountTables(board: Board): Board {
+  const existing = board.ytdCustomTables ?? []
+  const missing = HEADCOUNT_TABLES.filter((table) => !existing.some((item) => item.id === table.id))
+  if (missing.length === 0) return board
+  const ytdCustomTables = [
+    ...existing,
+    ...missing.map((table) => ({ ...table, columns: table.columns.map((column) => ({ ...column })) })),
+  ]
+  const known = new Set(ytdCustomTables.map((table) => table.id))
+  const preferred = [
+    ...HEADCOUNT_TABLES.map((table) => table.id),
+    ...(board.ytdTableOrder ?? []),
+    ...existing.map((table) => table.id),
+  ]
+  const ytdTableOrder = preferred.filter((id, index) => known.has(id) && preferred.indexOf(id) === index)
+  return { ...board, ytdCustomTables, ytdTableOrder }
+}
+
+function splitHeadcountGroup(group: BoardGroup): BoardGroup {
+  const kept: BoardRow[] = []
+  const months: BoardRow[] = []
+  const termination: BoardRow[] = []
+  const tenure: BoardRow[] = []
+  const hasCensus = group.rows.some((row) => row.cells[LABEL_COLUMN_ID] === "2025 headcount")
+  let moved = false
+  for (const row of group.rows) {
+    const label = row.cells[LABEL_COLUMN_ID] ?? ""
+    if (IMPROV_HEADCOUNT.some(([month]) => month === label)) {
+      months.push(countFrom(row))
+      moved = true
+      continue
+    }
+    const line = HEADCOUNT_MIX.find((item) => item.name === label || item.legacy === label)
+    const mix = line?.mix ?? row.mix
+    if (line || mix === "termination" || mix === "tenure") {
+      const next = shareFrom(row, line?.name ?? label)
+      if (mix === "tenure") tenure.push(next)
+      else termination.push(next)
+      moved = true
+      continue
+    }
+    if (label === "Total employees" && hasCensus) {
+      moved = true
+      continue
+    }
+    kept.push(row)
+  }
+  const monthRows = mergeMoved(group.customRows?.[HEADCOUNT_MONTH_TABLE_ID], months, headcountTemplateRows(HEADCOUNT_MONTH_TABLE_ID, group.id) ?? [])
+  const terminationRows = mergeMoved(
+    group.customRows?.[HEADCOUNT_TERMINATION_TABLE_ID],
+    termination,
+    headcountTemplateRows(HEADCOUNT_TERMINATION_TABLE_ID, group.id) ?? [],
+  )
+  const tenureRows = mergeMoved(
+    group.customRows?.[HEADCOUNT_TENURE_TABLE_ID],
+    tenure,
+    headcountTemplateRows(HEADCOUNT_TENURE_TABLE_ID, group.id) ?? [],
+  )
+  if (
+    !moved &&
+    monthRows === group.customRows?.[HEADCOUNT_MONTH_TABLE_ID] &&
+    terminationRows === group.customRows?.[HEADCOUNT_TERMINATION_TABLE_ID] &&
+    tenureRows === group.customRows?.[HEADCOUNT_TENURE_TABLE_ID]
+  ) {
+    return group
+  }
+  return {
+    ...group,
+    rows: kept,
+    customRows: {
+      ...group.customRows,
+      [HEADCOUNT_MONTH_TABLE_ID]: monthRows,
+      [HEADCOUNT_TERMINATION_TABLE_ID]: terminationRows,
+      [HEADCOUNT_TENURE_TABLE_ID]: tenureRows,
     },
   }
 }
 
-function ratioCell(raw: string | undefined, key: string): Record<string, string> {
-  if (!raw) return {}
-  const value = Number(raw)
-  if (!Number.isFinite(value) || value === 0) return { [key]: raw }
-  return { [key]: String(Math.abs(value) > 1 ? value / 100 : value) }
+function mergeMoved(existing: BoardRow[] | undefined, moved: BoardRow[], blanks: BoardRow[]): BoardRow[] {
+  if (!existing) return moved.length > 0 ? moved : blanks
+  if (moved.length === 0) return existing
+  const labels = new Set(existing.map((row) => (row.cells[LABEL_COLUMN_ID] ?? "").trim()))
+  const extra = moved.filter((row) => !labels.has((row.cells[LABEL_COLUMN_ID] ?? "").trim()))
+  return extra.length > 0 ? [...existing, ...extra] : existing
 }
 
-function mixStat(id: string, label: string, mix: "termination" | "tenure", percent: number | null): BoardRow {
+function countFrom(row: BoardRow): BoardRow {
+  const raw = row.cells[HEADCOUNT_COUNT_COLUMN_ID] || row.cells.q3 || row.cells[EXPECTED_COLUMN_ID] || ""
+  return countRow(row.id, row.cells[LABEL_COLUMN_ID] ?? "", raw ? Number(raw) : null)
+}
+
+function shareFrom(row: BoardRow, label: string): BoardRow {
+  const raw = row.cells[HEADCOUNT_SHARE_COLUMN_ID] || row.cells.q3 || row.cells[EXPECTED_COLUMN_ID] || ""
+  const stored = Number(raw)
+  const percent = !raw || !Number.isFinite(stored) ? null : Math.abs(stored) > 1 ? stored : stored * 100
+  return shareRow(row.id, label, percent)
+}
+
+function countRow(id: string, label: string, count: number | null): BoardRow {
   const cells: Record<string, string> = { [LABEL_COLUMN_ID]: label }
-  if (percent !== null) {
-    const stored = String(percent / 100)
-    cells.q3 = stored
-    cells[EXPECTED_COLUMN_ID] = stored
-  }
-  return { id, mix, measure: "percent", omitFromRollup: true, cells }
+  if (count !== null && Number.isFinite(count)) cells[HEADCOUNT_COUNT_COLUMN_ID] = String(count)
+  return { id, omitFromRollup: true, cells }
+}
+
+function shareRow(id: string, label: string, percent: number | null): BoardRow {
+  const cells: Record<string, string> = { [LABEL_COLUMN_ID]: label }
+  if (percent !== null && Number.isFinite(percent)) cells[HEADCOUNT_SHARE_COLUMN_ID] = String(percent / 100)
+  return { id, omitFromRollup: true, cells }
 }
 
 function headcountFact(id: string, label: string, count: number, rollup: boolean): BoardRow {
@@ -815,8 +934,12 @@ function headcountGroup(portco: PortcoSeed): BoardGroup {
           },
         }
       }),
-      ...headcountMixRows(portco.id),
     ],
+    customRows: {
+      [HEADCOUNT_MONTH_TABLE_ID]: headcountTemplateRows(HEADCOUNT_MONTH_TABLE_ID, portco.id) ?? [],
+      [HEADCOUNT_TERMINATION_TABLE_ID]: headcountTemplateRows(HEADCOUNT_TERMINATION_TABLE_ID, portco.id) ?? [],
+      [HEADCOUNT_TENURE_TABLE_ID]: headcountTemplateRows(HEADCOUNT_TENURE_TABLE_ID, portco.id) ?? [],
+    },
   }
 }
 
