@@ -1,4 +1,4 @@
-/** Saved boards and the previous copy are deleted once they are 24 hours old. */
+/** The previous save is deleted once it is 24 hours old. The current save stays. */
 export const SNAPSHOT_TTL_MS = 24 * 60 * 60 * 1000
 
 export function isExpired(savedAt: string, now: number, ttl = SNAPSHOT_TTL_MS): boolean {

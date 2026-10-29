@@ -1,7 +1,7 @@
 import fs from "node:fs"
 import path from "node:path"
 
-import { expiresAt, isExpired } from "../src/data/retention"
+import { isExpired } from "../src/data/retention"
 import { parseWorkspace } from "../src/data/persist"
 import {
   createSeedWorkspace,
@@ -38,7 +38,7 @@ export function currentBoard(dir: string, now = Date.now()): BoardPayload {
     source: "saved",
     savedAt: live.savedAt,
     savedBy: live.savedBy,
-    expiresAt: expiresAt(live.savedAt),
+    expiresAt: null,
     workspace: withoutRetiredStatuses(withoutYtdSubtitle(withFirmRatios(withImprovDeck(live.workspace)))),
   }
 }
@@ -77,7 +77,7 @@ export function saveSnapshot(
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 })
   purgeExpired(dir, now)
   const previous = readSnapshotFile(currentPath(dir))
-  if (previous && !isExpired(previous.savedAt, now)) {
+  if (previous) {
     fs.mkdirSync(historyDir(dir), { recursive: true, mode: 0o700 })
     const stamp = previous.savedAt.replace(/[:.]/g, "-")
     writeJson(path.join(historyDir(dir), `${stamp}.json`), previous)
@@ -93,9 +93,6 @@ export function saveSnapshot(
 }
 
 export function purgeExpired(dir: string, now = Date.now()): void {
-  const current = currentPath(dir)
-  const live = readSnapshotFile(current)
-  if (fs.existsSync(current) && (!live || isExpired(live.savedAt, now))) fs.unlinkSync(current)
   const folder = historyDir(dir)
   if (!fs.existsSync(folder)) return
   for (const name of fs.readdirSync(folder)) {

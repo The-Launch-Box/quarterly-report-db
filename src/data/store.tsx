@@ -187,7 +187,7 @@ function statusOf(input: { saving: boolean; saveError: string; dirty: boolean; s
   if (input.dirty) return { label: "Unsaved changes", tone: "warn" }
   if (input.savedAt) {
     const time = new Date(input.savedAt).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-    return { label: `Saved ${time} · removed after 24 hours`, tone: "ok" }
+    return { label: `Saved ${time}`, tone: "ok" }
   }
   return { label: "Starter figures", tone: "ok" }
 }

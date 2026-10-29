@@ -87,7 +87,7 @@ export function Shell() {
               <Button
                 size="icon"
                 aria-label="Save boards"
-                title="Save the boards. This copy is deleted after 24 hours."
+                title="Save the boards. This copy stays on the server. The previous save is kept for 24 hours."
                 disabled={saving}
                 onClick={() => void save()}
               >
