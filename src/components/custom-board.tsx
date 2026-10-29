@@ -224,7 +224,8 @@ function FirmTable({
     const token = flash?.rowId === row.id ? flash.token : null
     const nested = parent !== null
     const subrows = row.subrows ?? []
-    const expanded = !nested && openRows.has(row.id) && subrows.length > 0
+    const expanded = !nested && openRows.has(row.id)
+    const showToggle = !nested && (canEdit || subrows.length > 0)
     return (
       <tr key={row.id} className="group">
         {columns.map((column) => {
@@ -241,19 +242,17 @@ function FirmTable({
               {token !== null ? <span key={token} className="cell-flash pointer-events-none absolute inset-0" /> : null}
               {column.id === LABEL_COLUMN_ID ? (
                 <div className={cn("flex items-center", nested && "pl-6")}>
-                  {nested ? null : subrows.length > 0 ? (
+                  {showToggle ? (
                     <Button
                       variant="ghost"
                       size="icon"
                       aria-expanded={expanded}
-                      aria-label={`${expanded ? "Collapse" : "Expand"} sub-rows for ${rowLabel}`}
+                      aria-label={`${expanded ? "Hide" : "Show"} sub-rows for ${rowLabel}`}
                       onClick={() => toggleRow(row.id)}
                     >
                       {expanded ? <ChevronDown /> : <ChevronRight />}
                     </Button>
-                  ) : (
-                    <span className="inline-block w-8 shrink-0" aria-hidden="true" />
-                  )}
+                  ) : null}
                   <div className="min-w-0 flex-1">
                     <EditableCell
                       column={column}
@@ -381,12 +380,12 @@ function FirmTable({
           <tbody>
             {group.rows.map((row) => {
               const subrows = row.subrows ?? []
-              const expanded = openRows.has(row.id) && subrows.length > 0
+              const expanded = openRows.has(row.id)
               return (
                 <Fragment key={row.id}>
                   {renderGridRow(row, null)}
                   {expanded ? subrows.map((subrow) => renderGridRow(subrow, row)) : null}
-                  {canEdit ? (
+                  {canEdit && expanded ? (
                     <tr>
                       <td colSpan={columns.length + 1} className="border-b border-border-soft px-2 py-0.5">
                         <Button variant="ghost" size="sm" className="pl-8 text-muted-foreground" onClick={() => addSubrow(row.id)}>
