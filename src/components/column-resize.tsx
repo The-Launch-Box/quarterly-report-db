@@ -1,6 +1,13 @@
-import { useState, type PointerEvent as ReactPointerEvent } from "react"
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 
-import { LABEL_COLUMN_ID, MAX_COLUMN_WIDTH, MIN_COLUMN_WIDTH, type Column } from "@/data/types"
+import {
+  LABEL_COLUMN_ID,
+  MAX_COLUMN_WIDTH,
+  MIN_COLUMN_WIDTH,
+  SOLO_COLUMN_WIDTH,
+  screenWideColumn,
+  type Column,
+} from "@/data/types"
 
 const ACTION_COLUMN_WIDTH = 48
 
@@ -14,8 +21,40 @@ export function storedColumnWidth(column: Column): number {
   return 240
 }
 
-export function clampColumnWidth(width: number): number {
-  return Math.min(MAX_COLUMN_WIDTH, Math.max(MIN_COLUMN_WIDTH, Math.round(width)))
+export function clampColumnWidth(width: number, limit = MAX_COLUMN_WIDTH): number {
+  return Math.min(limit, Math.max(MIN_COLUMN_WIDTH, Math.round(width)))
+}
+
+/** How far a column may be dragged. A lone column can grow until the table fills its frame. */
+export function resizeCeiling(
+  column: Column,
+  columns: readonly Column[],
+  frameWidth: number,
+  trailing: boolean,
+  widthOf: (column: Column) => number,
+): number {
+  if (screenWideColumn(columns)?.id !== column.id) return MAX_COLUMN_WIDTH
+  const siblings = columns.reduce((sum, item) => (item.id === column.id ? sum : sum + widthOf(item)), 0)
+  const room = Math.round(frameWidth - siblings - (trailing ? ACTION_COLUMN_WIDTH : 0))
+  if (room <= MAX_COLUMN_WIDTH) return MAX_COLUMN_WIDTH
+  return Math.min(SOLO_COLUMN_WIDTH, room)
+}
+
+export function useFrameWidth() {
+  const ref = useRef<HTMLDivElement>(null)
+  const [width, setWidth] = useState(0)
+
+  useEffect(() => {
+    const node = ref.current
+    if (!node) return
+    const measure = () => setWidth(node.clientWidth)
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [])
+
+  return { ref, width }
 }
 
 export function tablePixelWidth(columns: Column[], trailing: boolean, widthOf: (column: Column) => number): number {
@@ -23,12 +62,21 @@ export function tablePixelWidth(columns: Column[], trailing: boolean, widthOf: (
   return columnsWidth + (trailing ? ACTION_COLUMN_WIDTH : 0)
 }
 
-export function useColumnWidths(onCommit: (columnId: string, width: number) => void) {
+export function useColumnWidths(
+  onCommit: (columnId: string, width: number) => void,
+  ceiling: (column: Column) => number = () => MAX_COLUMN_WIDTH,
+) {
   const [live, setLive] = useState<{ id: string; width: number } | null>(null)
+  const ceilingRef = useRef(ceiling)
+  ceilingRef.current = ceiling
 
   function widthOf(column: Column): number {
     if (live?.id === column.id) return live.width
     return storedColumnWidth(column)
+  }
+
+  function clamp(column: Column, width: number): number {
+    return clampColumnWidth(width, ceilingRef.current(column))
   }
 
   function onPointerDown(column: Column, event: ReactPointerEvent<HTMLElement>) {
@@ -42,7 +90,7 @@ export function useColumnWidths(onCommit: (columnId: string, width: number) => v
     document.body.style.userSelect = "none"
 
     function move(moveEvent: PointerEvent) {
-      setLive({ id: column.id, width: clampColumnWidth(start + moveEvent.clientX - startX) })
+      setLive({ id: column.id, width: clamp(column, start + moveEvent.clientX - startX) })
     }
 
     function up(upEvent: PointerEvent) {
@@ -50,7 +98,7 @@ export function useColumnWidths(onCommit: (columnId: string, width: number) => v
       window.removeEventListener("pointerup", up)
       document.body.style.cursor = previousCursor
       document.body.style.userSelect = previousSelect
-      const next = clampColumnWidth(start + upEvent.clientX - startX)
+      const next = clamp(column, start + upEvent.clientX - startX)
       setLive(null)
       if (next !== start) onCommit(column.id, next)
     }
@@ -65,11 +113,13 @@ export function useColumnWidths(onCommit: (columnId: string, width: number) => v
 export function ColumnResizeHandle({
   label,
   width,
+  max = MAX_COLUMN_WIDTH,
   onPointerDown,
   onResize,
 }: {
   label: string
   width: number
+  max?: number
   onPointerDown: (event: ReactPointerEvent<HTMLElement>) => void
   onResize: (width: number) => void
 }) {
@@ -79,7 +129,7 @@ export function ColumnResizeHandle({
       aria-orientation="vertical"
       aria-label={`Resize ${label}`}
       aria-valuemin={MIN_COLUMN_WIDTH}
-      aria-valuemax={MAX_COLUMN_WIDTH}
+      aria-valuemax={max}
       aria-valuenow={width}
       tabIndex={0}
       title="Drag to resize"
@@ -90,7 +140,7 @@ export function ColumnResizeHandle({
         const delta = event.key === "ArrowLeft" ? -16 : event.key === "ArrowRight" ? 16 : 0
         if (delta === 0) return
         event.preventDefault()
-        onResize(clampColumnWidth(width + delta))
+        onResize(clampColumnWidth(width + delta, max))
       }}
     />
   )

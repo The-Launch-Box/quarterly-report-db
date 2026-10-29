@@ -3,6 +3,8 @@ import {
   LABEL_COLUMN_ID,
   MAX_COLUMN_WIDTH,
   MIN_COLUMN_WIDTH,
+  SOLO_COLUMN_WIDTH,
+  screenWideColumn,
   type Board,
   type BoardGroup,
   type BoardRow,
@@ -151,18 +153,14 @@ export function reducer(workspace: Workspace, action: WorkspaceAction): Workspac
     case "set-column-width": {
       if (!Number.isFinite(action.width)) return workspace
       const width = Math.round(action.width)
-      if (width < MIN_COLUMN_WIDTH || width > MAX_COLUMN_WIDTH) return workspace
+      if (width < MIN_COLUMN_WIDTH) return workspace
       const board = workspace.boards.find((item) => item.id === action.boardId)
       if (!board) return workspace
-      if (board.firmId) {
-        const group = board.groups.find((item) => item.id === (action.groupId ?? board.groups[0]?.id))
-        const current = group ? tableColumns(board, group).find((column) => column.id === action.columnId) : undefined
-        if (!current || current.width === width) return workspace
-      } else if (board.columns.find((column) => column.id === action.columnId)?.width === width) {
-        return workspace
-      } else if (!board.columns.some((column) => column.id === action.columnId)) {
-        return workspace
-      }
+      const columns = columnsForWidth(board, action.groupId)
+      const current = columns.find((column) => column.id === action.columnId)
+      if (!current || current.width === width) return workspace
+      const limit = screenWideColumn(columns)?.id === current.id ? SOLO_COLUMN_WIDTH : MAX_COLUMN_WIDTH
+      if (width > limit) return workspace
       return mapBoard(workspace, action.boardId, (current) => {
         if (!current.firmId) {
           return {
@@ -385,6 +383,12 @@ function blankTable(groupId: string, title: string): BoardGroup {
 
 function tableColumns(board: Board, group: BoardGroup): Column[] {
   return group.columns ?? board.columns
+}
+
+function columnsForWidth(board: Board, groupId: string | undefined): Column[] {
+  if (!board.firmId) return board.columns
+  const group = board.groups.find((item) => item.id === (groupId ?? board.groups[0]?.id))
+  return group ? tableColumns(board, group) : []
 }
 
 /** Give every table on a firm board its own column list. */

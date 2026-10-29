@@ -3,6 +3,7 @@ import os from "node:os"
 import path from "node:path"
 
 import { isAdminEmail, isLaunchboxEmail, launchboxEmailFromClaims } from "../src/auth/access"
+import { resizeCeiling } from "../src/components/column-resize"
 import { firmTableMarks, trendSegment } from "../src/data/firm-chart"
 import { formatCurrency, parseNumber, parsePercentInput } from "../src/data/format"
 import { isExpired, SNAPSHOT_TTL_MS } from "../src/data/retention"
@@ -24,7 +25,7 @@ import { parseWorkspace } from "../src/data/persist"
 import { keepFirmBoards, reducer } from "../src/data/reducer"
 import { commitHtml, editorHtml, sanitizeRichText } from "../src/data/rich-text"
 import { createSeedWorkspace, IMPROV_OPERATING_RESULTS, seedProblems, varianceStatus, withExpectedColumn, withFirmRatios, withImprovDeck, withoutRetiredStatuses, withoutYtdSubtitle } from "../src/data/seed"
-import { EXPECTED_COLUMN_ID, LABEL_COLUMN_ID, type Board, type Workspace } from "../src/data/types"
+import { EXPECTED_COLUMN_ID, LABEL_COLUMN_ID, MAX_COLUMN_WIDTH, type Board, type Column, type Workspace } from "../src/data/types"
 
 function must<T>(value: T | undefined | null, message: string): T {
   if (value === undefined || value === null) throw new Error(message)
@@ -279,6 +280,88 @@ if (wideRevenue.boards.find((board) => board.id === "ytd")?.columns.find((column
 const parsedWidth = parseWorkspace(JSON.parse(JSON.stringify(sized)) as unknown)
 if (parsedWidth?.boards.find((board) => board.id === "board-pipeline")?.columns.find((column) => column.id === notes.id)?.width !== 320) {
   throw new Error("column width did not round trip")
+}
+const screenWide = reducer(withTable, {
+  type: "set-column-width",
+  boardId: "board-pipeline",
+  groupId: "table-ratios",
+  columnId: ratioColumn.id,
+  width: 1600,
+})
+const screenWideTable = must(screenWide.boards.find((board) => board.id === "board-pipeline")?.groups[1], "screen-wide table")
+if (screenWideTable.columns?.find((column) => column.id === ratioColumn.id)?.width !== 1600) {
+  throw new Error("a lone column could not fill the screen")
+}
+if (
+  reducer(withTable, {
+    type: "set-column-width",
+    boardId: "board-pipeline",
+    groupId: "table-ratios",
+    columnId: LABEL_COLUMN_ID,
+    width: 1600,
+  }) !== withTable
+) {
+  throw new Error("the title grew past the usual limit beside another column")
+}
+if (
+  reducer(widened, {
+    type: "set-column-width",
+    boardId: "board-pipeline",
+    groupId: "table-ratios",
+    columnId: ratioColumn.id,
+    width: 1600,
+  }) !== widened
+) {
+  throw new Error("a column grew past the usual limit beside other columns")
+}
+if (
+  reducer(withTable, {
+    type: "set-column-width",
+    boardId: "board-pipeline",
+    groupId: "table-ratios",
+    columnId: ratioColumn.id,
+    width: 4000,
+  }) !== withTable
+) {
+  throw new Error("a column wider than a screen was saved")
+}
+const onlyTitle = reducer(withTable, {
+  type: "delete-column",
+  boardId: "board-pipeline",
+  groupId: "table-ratios",
+  columnId: ratioColumn.id,
+})
+const titleWide = reducer(onlyTitle, {
+  type: "set-column-width",
+  boardId: "board-pipeline",
+  groupId: "table-ratios",
+  columnId: LABEL_COLUMN_ID,
+  width: 1600,
+})
+if (titleWide.boards.find((board) => board.id === "board-pipeline")?.groups[1]?.columns?.[0]?.width !== 1600) {
+  throw new Error("the only column could not fill the screen")
+}
+const parsedScreen = parseWorkspace(JSON.parse(JSON.stringify(screenWide)) as unknown)
+if (
+  parsedScreen?.boards.find((board) => board.id === "board-pipeline")?.groups[1]?.columns?.find((column) => column.id === ratioColumn.id)
+    ?.width !== 1600
+) {
+  throw new Error("a full-width column did not round trip")
+}
+if (reducer(seed, { type: "set-column-width", boardId: "revenue", columnId: "q3", width: 1600 }) !== seed) {
+  throw new Error("a portfolio column grew past the usual limit")
+}
+const lonePair: Column[] = [
+  { id: LABEL_COLUMN_ID, name: "Title", kind: "text" },
+  { id: "notes", name: "Column", kind: "text" },
+]
+const lone = must(lonePair[1], "lone column")
+if (resizeCeiling(lone, lonePair, 1400, true, () => 256) !== 1400 - 256 - 48) {
+  throw new Error("a lone column cannot reach the screen edge")
+}
+const title = must(lonePair[0], "title column")
+if (resizeCeiling(title, lonePair, 1400, true, () => 256) !== MAX_COLUMN_WIDTH) {
+  throw new Error("the title column ignored its usual limit")
 }
 const pipelineRow = must(pipelineGroup.rows[0], "pipeline row")
 const titled = reducer(custom, {

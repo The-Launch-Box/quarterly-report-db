@@ -1,8 +1,8 @@
 import { commitHtml, looksLikeHtml } from "./rich-text"
 import {
   LABEL_COLUMN_ID,
-  MAX_COLUMN_WIDTH,
   MIN_COLUMN_WIDTH,
+  SOLO_COLUMN_WIDTH,
   type Board,
   type BoardGroup,
   type BoardRow,
@@ -180,7 +180,7 @@ function isDecimalPlaces(value: unknown): value is number {
 }
 
 function isColumnWidth(value: unknown): value is number {
-  return typeof value === "number" && Number.isInteger(value) && value >= MIN_COLUMN_WIDTH && value <= MAX_COLUMN_WIDTH
+  return typeof value === "number" && Number.isInteger(value) && value >= MIN_COLUMN_WIDTH && value <= SOLO_COLUMN_WIDTH
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

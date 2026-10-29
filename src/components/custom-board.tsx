@@ -4,7 +4,7 @@ import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react"
 
 import { EditableCell } from "@/components/board-table"
 import { FirmChart } from "@/components/firm-chart"
-import { ColumnResizeHandle, tablePixelWidth, useColumnWidths } from "@/components/column-resize"
+import { ColumnResizeHandle, resizeCeiling, storedColumnWidth, tablePixelWidth, useColumnWidths, useFrameWidth } from "@/components/column-resize"
 import { Button, ConfirmDialog, Field, Input, Modal, Select } from "@/components/ui"
 import { listCompanies } from "@/data/metrics"
 import { useWorkspace } from "@/data/store"
@@ -200,7 +200,9 @@ function FirmTable({
   onDeleteSubrow: (rowId: string, subrowId: string) => void
   onDelete: () => void
 }) {
-  const { widthOf, onPointerDown } = useColumnWidths(onResizeColumn)
+  const frame = useFrameWidth()
+  const ceiling = (column: Column) => resizeCeiling(column, columns, frame.width, canEdit, storedColumnWidth)
+  const { widthOf, onPointerDown } = useColumnWidths(onResizeColumn, ceiling)
   const tableWidth = tablePixelWidth(columns, canEdit, widthOf)
   const [openRows, setOpenRows] = useState<ReadonlySet<string>>(() => new Set())
 
@@ -325,7 +327,7 @@ function FirmTable({
           </div>
         ) : null}
       </div>
-      <div className="max-h-[70vh] overflow-auto rounded-lg border border-border bg-card">
+      <div ref={frame.ref} className="max-h-[70vh] overflow-auto rounded-lg border border-border bg-card">
         <table className="border-separate border-spacing-0 text-sm" style={{ width: tableWidth, tableLayout: "fixed" }}>
           <caption className="sr-only">
             {group.name} on {boardTitle}
@@ -367,6 +369,7 @@ function FirmTable({
                     <ColumnResizeHandle
                       label={column.name}
                       width={widthOf(column)}
+                      max={ceiling(column)}
                       onPointerDown={(event) => onPointerDown(column, event)}
                       onResize={(width) => onResizeColumn(column.id, width)}
                     />

@@ -6,7 +6,7 @@ import { formatCurrency, formatNumber, formatPercent, parseNumber, parsePercentI
 import { useWorkspace } from "@/data/store"
 import { LABEL_COLUMN_ID, STATUS_VALUES, type Board, type BoardRow, type Column, type ColumnKind, type StatusValue } from "@/data/types"
 import { cn } from "@/lib/cn"
-import { ColumnResizeHandle, tablePixelWidth, useColumnWidths } from "@/components/column-resize"
+import { ColumnResizeHandle, resizeCeiling, storedColumnWidth, tablePixelWidth, useColumnWidths, useFrameWidth } from "@/components/column-resize"
 import { Button, Input } from "@/components/ui"
 
 interface BoardTableProps {
@@ -31,8 +31,11 @@ export function BoardTable({
   const [flash, setFlash] = useState<{ rowId: string; token: number } | null>(null)
   const flashCount = useRef(0)
   const groups = companyId === "all" ? board.groups : board.groups.filter((group) => group.id === companyId)
-  const { widthOf, onPointerDown } = useColumnWidths((columnId, width) =>
-    dispatch({ type: "set-column-width", boardId: board.id, columnId, width }),
+  const frame = useFrameWidth()
+  const ceiling = (column: Column) => resizeCeiling(column, board.columns, frame.width, canEdit, storedColumnWidth)
+  const { widthOf, onPointerDown } = useColumnWidths(
+    (columnId, width) => dispatch({ type: "set-column-width", boardId: board.id, columnId, width }),
+    ceiling,
   )
   const tableWidth = tablePixelWidth(board.columns, canEdit, widthOf)
 
@@ -56,7 +59,7 @@ export function BoardTable({
   }
 
   return (
-    <div className="max-h-[70vh] overflow-auto rounded-lg border border-border bg-card">
+    <div ref={frame.ref} className="max-h-[70vh] overflow-auto rounded-lg border border-border bg-card">
       <table className="border-separate border-spacing-0 text-sm" style={{ width: tableWidth, tableLayout: "fixed" }}>
         <caption className="sr-only">{board.title}</caption>
         <colgroup>
@@ -105,6 +108,7 @@ export function BoardTable({
                   <ColumnResizeHandle
                     label={column.name}
                     width={widthOf(column)}
+                    max={ceiling(column)}
                     onPointerDown={(event) => onPointerDown(column, event)}
                     onResize={(width) => dispatch({ type: "set-column-width", boardId: board.id, columnId: column.id, width })}
                   />
