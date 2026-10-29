@@ -10,8 +10,8 @@ export function portcoId(id: string): PortcoId | null {
 export const BRAND_MARK: Record<PortcoId, string> = {
   echelon: "var(--color-echelon-yellow)",
   improv: "var(--color-improv-aqua)",
-  hyperscayle: "var(--color-hyper-pink)",
-  vescape: "var(--color-vescape-magenta)",
+  hyperscayle: "var(--color-hyper-green)",
+  vescape: "var(--color-vescape-yellow)",
   bluetrail: "var(--color-blaze-blue)",
   dxfoundation: "var(--color-dxf-nebula)",
 }
@@ -31,15 +31,15 @@ export const BRAND_SERIES: Record<PortcoId, readonly string[]> = {
     "var(--color-improv-strategic-blue)",
   ],
   hyperscayle: [
-    "var(--color-hyper-pink)",
-    "var(--color-hyper-blue)",
     "var(--color-hyper-green)",
+    "var(--color-hyper-blue)",
     "var(--color-hyper-red)",
+    "var(--color-hyper-pink)",
   ],
   vescape: [
-    "var(--color-vescape-magenta)",
     "var(--color-vescape-yellow)",
     "var(--color-vescape-purple)",
+    "var(--color-vescape-magenta)",
     "var(--color-vescape-gray)",
   ],
   bluetrail: [

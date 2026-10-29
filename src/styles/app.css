@@ -229,8 +229,8 @@ dialog::backdrop {
 .swatch { background-color: var(--color-tlb-orange); }
 .swatch[data-brand="echelon"] { background-color: var(--color-echelon-yellow); }
 .swatch[data-brand="improv"] { background-color: var(--color-improv-aqua); }
-.swatch[data-brand="hyperscayle"] { background-color: var(--color-hyper-pink); }
-.swatch[data-brand="vescape"] { background-color: var(--color-vescape-magenta); }
+.swatch[data-brand="hyperscayle"] { background-color: var(--color-hyper-green); }
+.swatch[data-brand="vescape"] { background-color: var(--color-vescape-yellow); }
 .swatch[data-brand="bluetrail"] { background-color: var(--color-blaze-blue); }
 .swatch[data-brand="dxfoundation"] { background-color: var(--color-dxf-nebula); }
 
@@ -244,11 +244,11 @@ dialog::backdrop {
   background-color: color-mix(in srgb, var(--color-improv-strategic-blue) 58%, var(--color-bg-raised));
 }
 .group-rule[data-brand="hyperscayle"] {
-  box-shadow: inset 3px 0 0 var(--color-hyper-pink);
+  box-shadow: inset 3px 0 0 var(--color-hyper-green);
   background-color: color-mix(in srgb, var(--color-hyper-foundation) 62%, var(--color-bg-raised));
 }
 .group-rule[data-brand="vescape"] {
-  box-shadow: inset 3px 0 0 var(--color-vescape-magenta);
+  box-shadow: inset 3px 0 0 var(--color-vescape-yellow);
   background-color: color-mix(in srgb, var(--color-vescape-blue) 58%, var(--color-bg-raised));
 }
 .group-rule[data-brand="bluetrail"] {
@@ -272,12 +272,12 @@ dialog::backdrop {
   font-family: Lustria, Georgia, serif;
 }
 .company-name[data-brand="hyperscayle"] {
-  color: var(--color-hyper-pink);
+  color: var(--color-hyper-green);
   font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
   letter-spacing: -0.03em;
 }
 .company-name[data-brand="vescape"] {
-  color: var(--color-vescape-magenta);
+  color: var(--color-vescape-yellow);
   font-family: Archivo, "Helvetica Neue", sans-serif;
   font-style: italic;
   font-weight: 700;
@@ -387,7 +387,7 @@ dialog::backdrop {
   --color-card-foreground: var(--color-hyper-off-white);
   --color-popover: var(--color-hyper-foundation-dark);
   --color-popover-foreground: var(--color-hyper-off-white);
-  --color-primary: var(--color-hyper-pink);
+  --color-primary: var(--color-hyper-green);
   --color-primary-foreground: var(--color-hyper-ink);
   --color-secondary: var(--color-hyper-blue);
   --color-secondary-foreground: var(--color-hyper-foundation);
@@ -416,7 +416,7 @@ dialog::backdrop {
   --color-card-foreground: var(--color-vescape-white);
   --color-popover: var(--color-vescape-blue-dark);
   --color-popover-foreground: var(--color-vescape-white);
-  --color-primary: var(--color-vescape-magenta);
+  --color-primary: var(--color-vescape-yellow);
   --color-primary-foreground: var(--color-vescape-blue-dark);
   --color-secondary: var(--color-vescape-purple);
   --color-secondary-foreground: var(--color-vescape-white);
